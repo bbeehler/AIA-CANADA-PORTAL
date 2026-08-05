@@ -14,7 +14,9 @@ def test_demo_member_pages_render_without_exceptions():
     app = AppTest.from_file(APP, default_timeout=30).run()
     next(button for button in app.button if button.label == "View as member").click().run()
     assert not app.exception
-    for page in ["Benchmark Explorer", "Performance Lab", "Resources", "Contribute Data"]:
+    for page in [
+        "Benchmark Explorer", "Performance Lab", "Market Demographics", "Resources", "Contribute Data"
+    ]:
         portal_radio(app).set_value(page).run()
         assert not app.exception, f"{page}: {[str(error.value) for error in app.exception]}"
 

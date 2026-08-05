@@ -10,6 +10,8 @@ flowchart TD
   ST --> Q["Approval queue"]
   Q --> C["Curated aggregate dataset"]
   C --> DB
+  SC["Statistics Canada APIs"] --> OP["Trusted sync script"]
+  OP --> DB
 ```
 
 ## Trust boundaries
@@ -22,6 +24,8 @@ flowchart TD
 - Raw member files are private. Owners can read their own submissions; active admins can review all submissions.
 - Approval changes workflow status only. Raw files do not become visible to members and are not automatically added to published analytics.
 - Dataset “removal” defaults to archive. This preserves provenance and supports auditability.
+- Statistics Canada data is synchronized by a trusted operator using a temporary server-side secret-key environment variable. Streamlit reads cached Supabase snapshots and never receives that key.
+- Municipalities use census subdivisions and postal analysis uses three-character FSAs. Full postal codes are prohibited from member uploads.
 
 ## Roles
 

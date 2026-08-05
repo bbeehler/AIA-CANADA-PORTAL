@@ -1,2 +1,2 @@
-reporting_month,province,shop_type,bay_count,technician_count,repair_orders,hours_sold,labour_sales_cad,parts_sales_cad,tire_sales_cad
-2026-01,ON,Mechanical,5,4,220,420.0,52500.00,76000.00,0.00
+reporting_month,province,municipality,forward_sortation_area,shop_type,bay_count,technician_count,repair_orders,hours_sold,labour_sales_cad,parts_sales_cad,tire_sales_cad
+2026-01,ON,Ottawa,K1A,Mechanical,5,4,220,420.0,52500.00,76000.00,0.00

@@ -39,3 +39,22 @@ def test_negative_values_are_rejected():
     result = validate_shop_upload(frame)
     assert not result.valid
     assert any("negative" in error for error in result.errors)
+
+
+def test_optional_municipality_and_fsa_are_preserved():
+    frame = valid_frame()
+    frame["municipality"] = "Ottawa"
+    frame["forward_sortation_area"] = "k1a"
+    result = validate_shop_upload(frame)
+    assert result.valid
+    assert result.data is not None
+    assert result.data.loc[0, "municipality"] == "Ottawa"
+    assert result.data.loc[0, "forward_sortation_area"] == "K1A"
+
+
+def test_full_postal_code_is_rejected_in_fsa_field():
+    frame = valid_frame()
+    frame["forward_sortation_area"] = "K1A 0B1"
+    result = validate_shop_upload(frame)
+    assert not result.valid
+    assert any("first three" in error for error in result.errors)

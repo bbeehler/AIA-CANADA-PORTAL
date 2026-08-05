@@ -16,6 +16,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 - Secure administrator editing and permanent deletion of member accounts
 - Supabase schema with explicit Data API grants, RLS policies and private Storage policies
 - Page-level provenance for all values transcribed from the 2015 AIA Canada report
+- Statistics Canada Census Profile integration for provinces, municipalities and three-character postal regions
 - Demo member/admin workspaces for stakeholder review
 
 ## Local demo
@@ -67,7 +68,18 @@ Requirements: Node/npm, Supabase project access, and the Supabase CLI.
 
    Legacy projects can use `SUPABASE_SERVICE_ROLE_KEY` instead. Never add either secret to Streamlit.
 
-4. Confirm the first admin can sign in, then approve other member profiles from **Admin Centre → Users & access**.
+4. Load official demographic snapshots after the demographic migration is applied:
+
+   ```bash
+   export SUPABASE_URL='https://YOUR_PROJECT_REF.supabase.co'
+   export SUPABASE_SECRET_KEY='sb_secret_YOUR_KEY'
+   python scripts/sync_statcan_demographics.py
+   unset SUPABASE_SECRET_KEY
+   ```
+
+   The script reads the Statistics Canada 2021 Census Profile SDMX API and loads provinces/territories, census subdivisions (municipalities), and forward sortation areas (three-character postal regions). Run it only from a trusted operator terminal.
+
+5. Confirm the first admin can sign in, then approve other member profiles from **Admin Centre → Users & access**.
 
 Administrators can edit a member's email, profile, role and membership status from the same screen. Permanent deletion removes the Auth account, profile, private contribution records and contribution files. The current administrator and the last active administrator are protected from deletion.
 
@@ -95,6 +107,7 @@ Administrators can edit a member's email, profile, role and membership status fr
 | `src/aia_portal/` | Auth, data, exports, validation, repository and UI modules |
 | `supabase/migrations/` | Database, RLS, Storage and initial CMS records |
 | `scripts/seed_data.py` | Trusted operator seed loader |
+| `scripts/sync_statcan_demographics.py` | Trusted Statistics Canada demographic synchronizer |
 | `data/` | Source-transcribed benchmarks and member template |
 | `docs/ARCHITECTURE.md` | Trust boundaries, roles and hardening backlog |
 | `docs/DATA_DICTIONARY.md` | Benchmark and contribution field definitions |

@@ -39,6 +39,8 @@ One row represents an aggregate month for a shop. Direct identifiers are prohibi
 |---|---|---|
 | `reporting_month` | `YYYY-MM` | Required |
 | `province` | two-letter code | Canadian province or territory |
+| `municipality` | text | Optional municipality name; 100 characters maximum |
+| `forward_sortation_area` | three characters | Optional first three postal-code characters, such as `K1A`; never a full postal code |
 | `shop_type` | text | Mechanical, Tire, Collision, or Other |
 | `bay_count` | number | Greater than zero |
 | `technician_count` | number | Greater than zero; FTE or consistent headcount methodology |
@@ -49,3 +51,21 @@ One row represents an aggregate month for a shop. Direct identifiers are prohibi
 | `tire_sales_cad` | currency | Canadian dollars; zero if not applicable |
 
 Never include customer names, emails, phone numbers, addresses, VINs, licence plates, invoice numbers, work-order numbers, employee names, or free-text customer notes.
+
+## Statistics Canada demographic data
+
+Demographic observations come from the 2021 Census Profile SDMX API. Geography is keyed by the official Dissemination Geography Unique Identifier (DGUID), never by a display name.
+
+| Field | Meaning |
+|---|---|
+| `geo_uid` | Official 2021 Census DGUID |
+| `geo_level` | `province`, `municipality` (CSD), or `postal_region` (FSA) |
+| `geo_code` | Province UID, census-subdivision UID, or three-character FSA |
+| `province_code` | Two-letter AIA portal province/territory code |
+| `metric_code` | Stable AIA portal demographic metric identifier |
+| `reference_period` | Census year, income year, or comparison period represented by the value |
+| `source_characteristic_id` | Statistics Canada Census Profile characteristic code |
+| `source_flow` | `DF_PR`, `DF_CSD`, or `DF_FSA` |
+| `retrieved_at` | UTC timestamp of the API synchronization |
+
+The first metric catalogue covers population and growth, density, households, broad age groups, total and after-tax household income, and labour-force rates. Income observations refer to 2020; after-tax income is spending-capacity context and must not be described as current spending. FSA data represents census forward sortation areas derived from reported postal codes, not exact delivery boundaries.

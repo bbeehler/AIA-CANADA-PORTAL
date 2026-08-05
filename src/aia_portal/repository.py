@@ -93,6 +93,19 @@ class DemoRepository:
             resources = [item for item in resources if item.get("status") == "published"]
         return sorted(resources, key=lambda item: (item.get("section", ""), item.get("sort_order", 0)))
 
+    def demographic_geographies(
+        self,
+        geo_level: str,
+        province_code: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return []
+
+    def demographic_observations(self, geography_id: str) -> list[dict[str, Any]]:
+        return []
+
+    def demographic_sync_runs(self) -> list[dict[str, Any]]:
+        return []
+
     def submit_contribution(
         self,
         *,
@@ -261,6 +274,59 @@ class SupabaseRepository:
         if not include_unpublished:
             query = query.eq("status", "published")
         return list(query.execute().data or [])
+
+    def demographic_geographies(
+        self,
+        geo_level: str,
+        province_code: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        page_size = 1000
+        offset = 0
+        while True:
+            query = (
+                self.client.table("demographic_geographies")
+                .select("*")
+                .eq("geo_level", geo_level)
+                .order("geo_name")
+            )
+            if province_code:
+                query = query.eq("province_code", province_code)
+            page = list(query.range(offset, offset + page_size - 1).execute().data or [])
+            rows.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+        return rows
+
+    def demographic_observations(self, geography_id: str) -> list[dict[str, Any]]:
+        response = (
+            self.client.table("demographic_observations")
+            .select(
+                "value,reference_period,source_characteristic_id,source_characteristic_name,"
+                "source_flow,source_url,retrieved_at,"
+                "demographic_metrics(metric_code,label,category,unit,description,sort_order)"
+            )
+            .eq("geography_id", geography_id)
+            .execute()
+        )
+        rows: list[dict[str, Any]] = []
+        for item in response.data or []:
+            record = dict(item)
+            metric = record.pop("demographic_metrics", {}) or {}
+            record.update(metric)
+            rows.append(record)
+        return sorted(rows, key=lambda item: item.get("sort_order", 0))
+
+    def demographic_sync_runs(self) -> list[dict[str, Any]]:
+        response = (
+            self.client.table("demographic_sync_runs")
+            .select("*")
+            .order("started_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        return list(response.data or [])
 
     def submit_contribution(
         self,

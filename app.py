@@ -37,6 +37,23 @@ from aia_portal.validation import read_uploaded_table, validate_shop_upload  # n
 AIA_COLOUR_LOGO_URL = "https://www.aiacanada.com/wp-content/uploads/2022/09/AIA-Colour-Logo-72DPI.png"
 AIA_WHITE_LOGO_URL = "https://www.aiacanada.com/wp-content/uploads/2022/09/AIA-White-Logo-300DPI.png"
 
+PROVINCE_NAMES = {
+    "AB": "Alberta", "BC": "British Columbia", "MB": "Manitoba", "NB": "New Brunswick",
+    "NL": "Newfoundland and Labrador", "NS": "Nova Scotia", "NT": "Northwest Territories",
+    "NU": "Nunavut", "ON": "Ontario", "PE": "Prince Edward Island", "QC": "Quebec",
+    "SK": "Saskatchewan", "YT": "Yukon",
+}
+DEMOGRAPHIC_LEVELS = {
+    "Province or territory": "province",
+    "Municipality": "municipality",
+    "Postal region (FSA)": "postal_region",
+}
+AIA_REGION_BY_PROVINCE = {
+    "BC": "British Columbia", "AB": "Alberta", "MB": "Prairies", "SK": "Prairies",
+    "ON": "Ontario", "QC": "Quebec", "NL": "Atlantic", "PE": "Atlantic",
+    "NS": "Atlantic", "NB": "Atlantic",
+}
+
 
 st.set_page_config(
     page_title="AIA Canada Data Portal",
@@ -167,7 +184,10 @@ def portal_sidebar(user: PortalUser) -> str:
         st.image(AIA_WHITE_LOGO_URL, width=180)
         st.markdown('<div class="aia-logo-sub">Data Portal</div>', unsafe_allow_html=True)
         st.write("")
-        pages = ["Overview", "Benchmark Explorer", "Performance Lab", "Resources", "Contribute Data"]
+        pages = [
+            "Overview", "Benchmark Explorer", "Performance Lab", "Market Demographics",
+            "Resources", "Contribute Data",
+        ]
         if user.is_admin:
             pages.append("Admin Centre")
         current = st.radio("Portal", pages, label_visibility="collapsed")
@@ -451,6 +471,206 @@ def performance_page(repo) -> None:
         metric_card("Productivity opportunity", f"${productivity_gap:,.0f}", f"Gap to {target_productivity:.1f} hours / technician / day")
     st.warning(
         "The two opportunity lenses can overlap and should not be added together. They are conversation starters for scheduling, inspection, advisor capacity and technician utilization."
+    )
+
+
+def _demographic_display(item: dict | None) -> str:
+    if not item:
+        return "—"
+    value = float(item["value"])
+    unit = item.get("unit")
+    if unit == "cad":
+        return f"${value:,.0f}"
+    if unit == "percent":
+        return f"{value:,.1f}%"
+    if unit == "years":
+        return f"{value:,.1f} years"
+    if unit == "people_per_square_km":
+        return f"{value:,.1f}/km²"
+    if item.get("metric_code") == "average_household_size":
+        return f"{value:,.1f}"
+    return f"{value:,.0f}"
+
+
+def demographics_page(repo, user: PortalUser) -> None:
+    page_intro(
+        "Canadian market context",
+        "Connect auto care data to the communities it serves",
+        "Explore official population, household, income, age and workforce context by province, municipality and three-character postal region.",
+    )
+    st.caption(
+        "Demographic values are from the 2021 Census Profile. Income measures refer to 2020 and are context—not current consumer spending estimates."
+    )
+
+    level_label = st.segmented_control(
+        "Geographic level",
+        list(DEMOGRAPHIC_LEVELS),
+        default="Province or territory",
+    )
+    geo_level = DEMOGRAPHIC_LEVELS[level_label]
+    province_code = None
+    if geo_level != "province":
+        province_code = st.selectbox(
+            "Province or territory",
+            list(PROVINCE_NAMES),
+            format_func=lambda code: PROVINCE_NAMES[code],
+        )
+
+    geographies = repo.demographic_geographies(geo_level, province_code)
+    if not geographies:
+        st.info(
+            "The demographic database is ready, but this geographic level has not been synchronized yet. "
+            "An AIA Canada administrator can run the trusted Statistics Canada sync from Codespaces."
+        )
+        if user.is_admin:
+            st.code("python scripts/sync_statcan_demographics.py", language="bash")
+        return
+
+    labels = {
+        f"{item.get('geo_name')} · {item.get('geo_code')}": item
+        for item in geographies
+    }
+    selected_label = st.selectbox(
+        "Community or region",
+        labels,
+        help="Postal regions use the first three postal-code characters only; full postal codes are not stored.",
+    )
+    selected = labels[selected_label]
+    observations = repo.demographic_observations(selected["geo_uid"])
+    if not observations:
+        st.warning("This geography has no loaded observations. Ask an administrator to refresh the source data.")
+        return
+    metrics = {item["metric_code"]: item for item in observations}
+
+    cards = st.columns(5)
+    highlights = [
+        ("Population", "population_2021"),
+        ("Five-year growth", "population_growth_2016_2021"),
+        ("Median age", "median_age"),
+        ("After-tax household income", "median_after_tax_household_income"),
+        ("Employment rate", "employment_rate"),
+    ]
+    for column, (label, code) in zip(cards, highlights):
+        with column:
+            item = metrics.get(code)
+            period = item.get("reference_period", "") if item else ""
+            metric_card(label, _demographic_display(item), f"Reference period: {period}" if period else "Not available")
+
+    population_codes = ["population_2016", "population_2021"]
+    population_rows = [metrics[code] for code in population_codes if code in metrics]
+    income_codes = [
+        "median_household_income",
+        "median_after_tax_household_income",
+        "average_after_tax_household_income",
+    ]
+    income_rows = [metrics[code] for code in income_codes if code in metrics]
+    left, right = st.columns(2, gap="large")
+    with left:
+        if population_rows:
+            population = pd.DataFrame(population_rows)
+            fig = px.bar(
+                population,
+                x="reference_period",
+                y="value",
+                text_auto=",.0f",
+                title="Population change",
+                labels={"reference_period": "Census year", "value": "Population"},
+                color_discrete_sequence=["#1B5B83"],
+            )
+            chart(fig)
+    with right:
+        if income_rows:
+            income = pd.DataFrame(income_rows)
+            fig = px.bar(
+                income,
+                x="label",
+                y="value",
+                text_auto=",.0f",
+                title="Household income context",
+                labels={"label": "", "value": "2020 dollars"},
+                color="metric_code",
+                color_discrete_sequence=["#123E5A", "#D7263D"],
+            )
+            fig.update_traces(texttemplate="$%{y:,.0f}")
+            chart(fig)
+
+    age = pd.DataFrame([
+        metrics[code]
+        for code in ["age_0_14", "age_15_64", "age_65_plus"]
+        if code in metrics
+    ])
+    if not age.empty:
+        total_age_population = age["value"].sum()
+        age["share"] = age["value"] / total_age_population * 100
+        fig = px.bar(
+            age,
+            x="label",
+            y="share",
+            text_auto=".1f",
+            title="Age composition",
+            labels={"label": "", "share": "Share of population (%)"},
+            color="metric_code",
+            color_discrete_sequence=["#6F9CB7", "#1B5B83", "#D7263D"],
+        )
+        fig.update_traces(texttemplate="%{y:.1f}%")
+        chart(fig)
+
+    workforce = pd.DataFrame([
+        metrics[code]
+        for code in ["participation_rate", "employment_rate", "unemployment_rate"]
+        if code in metrics
+    ])
+    if not workforce.empty:
+        fig = px.bar(
+            workforce,
+            x="label",
+            y="value",
+            text_auto=".1f",
+            title="Workforce indicators",
+            labels={"label": "", "value": "Percent"},
+            color="metric_code",
+            color_discrete_sequence=["#1B5B83", "#3D789B", "#D7263D"],
+        )
+        chart(fig)
+
+    st.subheader("AIA auto care benchmark alignment")
+    aia_region = AIA_REGION_BY_PROVINCE.get(selected["province_code"], "Canada")
+    benchmark = repo.segment_benchmarks()
+    geography_type = "national" if aia_region == "Canada" else "region"
+    scoped = benchmark[
+        (benchmark["geography_type"] == geography_type)
+        & (benchmark["geography"] == aia_region)
+        & (benchmark["segment"] == "Mechanical")
+        & (benchmark["affiliation"] == "All")
+    ]
+    if not scoped.empty:
+        low = scoped["hours_sold_technician_day"].min()
+        high = scoped["hours_sold_technician_day"].max()
+        metric_card(
+            f"2015 AIA benchmark region · {aia_region}",
+            f"{low:.1f}–{high:.1f} hours",
+            "Hours sold per technician per day across shop-size cohorts; historical context only.",
+        )
+
+    detail = pd.DataFrame(observations)[
+        ["category", "label", "value", "unit", "reference_period", "source_characteristic_name"]
+    ]
+    st.subheader("All demographic measures")
+    st.dataframe(detail, hide_index=True, width="stretch")
+    st.download_button(
+        "Download demographic CSV",
+        csv_bytes(detail),
+        file_name=f"aia_demographics_{selected['geo_code']}.csv",
+        mime="text/csv",
+    )
+    retrieved = max((item.get("retrieved_at", "") for item in observations), default="")
+    st.caption(
+        f"Source: Statistics Canada, 2021 Census Profile · Flow {selected['source_flow']}"
+        + (f" · Retrieved {retrieved[:10]}" if retrieved else "")
+    )
+    st.link_button(
+        "View Statistics Canada Census Profile methodology",
+        "https://www12.statcan.gc.ca/wds-sdw/2021profile-profil2021-eng.cfm",
     )
 
 
@@ -759,6 +979,18 @@ def admin_page(repo, user: PortalUser) -> None:
                     except Exception as exc:
                         st.error(f"Could not stage the dataset: {exc}")
 
+        st.subheader("Statistics Canada demographic sync")
+        sync_runs = repo.demographic_sync_runs()
+        if sync_runs:
+            st.dataframe(pd.DataFrame(sync_runs), hide_index=True, width="stretch")
+        else:
+            st.info("No demographic synchronization run has been recorded yet.")
+        st.caption(
+            "Run the trusted operator script from Codespaces with a temporary Supabase secret-key environment variable. "
+            "Never add the secret key to Streamlit."
+        )
+        st.code("python scripts/sync_statcan_demographics.py", language="bash")
+
     with cms_tab:
         st.subheader("Published resources")
         resources = repo.resources(include_unpublished=True)
@@ -842,6 +1074,8 @@ elif page == "Benchmark Explorer":
     explorer_page(repository)
 elif page == "Performance Lab":
     performance_page(repository)
+elif page == "Market Demographics":
+    demographics_page(repository, user)
 elif page == "Resources":
     resources_page(repository, user)
 elif page == "Contribute Data":
