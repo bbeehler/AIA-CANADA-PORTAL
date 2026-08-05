@@ -1,0 +1,7 @@
+streamlit==1.61.0
+supabase==2.31.0
+pandas==2.2.3
+plotly==6.9.0
+openpyxl==3.1.5
+defusedxml==0.7.1
+reportlab==5.0.0

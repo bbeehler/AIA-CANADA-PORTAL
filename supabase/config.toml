@@ -1,0 +1,26 @@
+project_id = "aia-canada-data-portal"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 17
+
+[storage]
+enabled = true
+file_size_limit = "25MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:8501"
+additional_redirect_urls = ["http://localhost:8501"]
+enable_signup = false
+minimum_password_length = 10
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+enable_confirmations = true

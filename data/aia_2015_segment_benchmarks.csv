@@ -1,0 +1,31 @@
+segment,shop_size,geography_type,geography,affiliation,sample_size,average_repair_orders_year,average_hours_repair_order,average_repair_orders_technician_day,percentage_exceed_two_hours,percentage_sales_from_tires,percentage_with_apprentices,hours_sold_technician_day,percentage_with_service_advisor,percentage_parts_from_oem,source_page
+Mechanical,1-3 bays,region,British Columbia,All,21,1614,1.5,2.1,19,,57,3.8,62,15,7
+Mechanical,1-3 bays,region,Alberta,All,9,1874,1.7,2.5,22,,44,4.4,100,19,7
+Mechanical,1-3 bays,region,Prairies,All,9,1547,2.4,2.3,44,,44,5.5,89,21,7
+Mechanical,1-3 bays,region,Ontario,All,52,1359,1.9,2.1,39,,40,5.0,81,20,7
+Mechanical,1-3 bays,region,Quebec,All,52,1955,1.6,2.9,23,,23,5.6,69,14,7
+Mechanical,1-3 bays,region,Atlantic,All,17,2267,1.7,2.6,47,,53,5.8,77,11,7
+Mechanical,1-3 bays,national,Canada,No banner,98,1388,1.8,2.3,35,,41,5.0,74,18,7
+Mechanical,1-3 bays,national,Canada,With banner,62,1862,1.7,2.8,26,,36,5.3,79,14,7
+Mechanical,1-3 bays,national,Canada,All,160,1706,1.7,2.5,31,,39,5.1,77,16,7
+Mechanical,4-6 bays,region,British Columbia,All,16,1928,2.1,1.8,69,,69,4.0,81,18,8
+Mechanical,4-6 bays,region,Alberta,All,26,2649,1.6,2.2,19,,81,3.7,96,17,8
+Mechanical,4-6 bays,region,Prairies,All,9,2586,1.5,3.0,11,,56,4.8,89,11,8
+Mechanical,4-6 bays,region,Ontario,All,72,2471,1.5,2.4,21,,57,4.1,86,19,8
+Mechanical,4-6 bays,region,Quebec,All,39,2829,1.5,2.5,15,,54,3.8,85,16,8
+Mechanical,4-6 bays,region,Atlantic,All,7,2576,1.2,2.5,0,,71,3.9,100,21,8
+Mechanical,4-6 bays,national,Canada,No banner,87,2364,1.7,2.2,28,,61,4.0,86,20,8
+Mechanical,4-6 bays,national,Canada,With banner,82,2727,1.4,2.6,17,,62,3.9,100,15,8
+Mechanical,4-6 bays,national,Canada,All,169,2540,1.6,2.4,23,,61,4.0,93,17,8
+Mechanical,7+ bays,region,British Columbia,All,6,3006,1.6,2.1,33,,83,4.2,83,22,9
+Mechanical,7+ bays,region,Alberta,All,17,4976,1.9,1.9,41,,94,3.5,100,20,9
+Mechanical,7+ bays,region,Prairies,All,8,3617,1.7,2.4,25,,50,4.5,100,14,9
+Mechanical,7+ bays,region,Ontario,All,18,4467,1.5,2.4,11,,78,4.2,94,21,9
+Mechanical,7+ bays,region,Quebec,All,16,4021,1.7,2.1,31,,88,4.1,81,17,9
+Mechanical,7+ bays,region,Atlantic,All,1,2200,2.1,2.2,100,,0,5.0,100,15,9
+Mechanical,7+ bays,national,Canada,No banner,27,3240,1.8,2.0,26,,89,4.0,85,22,9
+Mechanical,7+ bays,national,Canada,With banner,39,4899,1.6,2.3,31,,74,4.0,97,17,9
+Mechanical,7+ bays,national,Canada,All,66,4220,1.7,2.2,29,,80,4.0,92,19,9
+Tire,1-5 bays,national,Canada,All,26,3306,1.3,3.3,,39,39,5.1,89,13,10
+Tire,6+ bays,national,Canada,All,26,6253,1.3,2.7,,37,77,4.5,100,11,10
+Tire,All sizes,national,Canada,All,52,4779,1.3,3.0,,38,58,4.8,94,12,10

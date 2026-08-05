@@ -1,0 +1,85 @@
+shop_type,cohort,metric_code,metric_label,value,unit,sort_order,source_page
+Mechanical,All shops,sample_size,Number of shops,395,count,1,12
+Mechanical,Ticket size leaders,sample_size,Number of shops,132,count,1,12
+Mechanical,Productivity leaders,sample_size,Number of shops,132,count,1,12
+Mechanical,All shops,years_open,Years open,26.7,years,2,12
+Mechanical,Ticket size leaders,years_open,Years open,24.8,years,2,12
+Mechanical,Productivity leaders,years_open,Years open,26.6,years,2,12
+Mechanical,All shops,number_of_bays,Number of bays,4.6,count,3,12
+Mechanical,Ticket size leaders,number_of_bays,Number of bays,4.5,count,3,12
+Mechanical,Productivity leaders,number_of_bays,Number of bays,4.2,count,3,12
+Mechanical,All shops,days_open,Days open per year,259,days,4,12
+Mechanical,Ticket size leaders,days_open,Days open per year,260,days,4,12
+Mechanical,Productivity leaders,days_open,Days open per year,259,days,4,12
+Mechanical,All shops,number_of_technicians,Number of technicians,4.0,count,5,12
+Mechanical,Ticket size leaders,number_of_technicians,Number of technicians,3.7,count,5,12
+Mechanical,Productivity leaders,number_of_technicians,Number of technicians,2.9,count,5,12
+Mechanical,All shops,technician_to_bay_ratio,Technician-to-bay ratio,0.87,ratio,6,12
+Mechanical,Ticket size leaders,technician_to_bay_ratio,Technician-to-bay ratio,0.81,ratio,6,12
+Mechanical,Productivity leaders,technician_to_bay_ratio,Technician-to-bay ratio,0.69,ratio,6,12
+Mechanical,All shops,daily_repair_orders,Daily repair order count,9.3,count,7,12
+Mechanical,Ticket size leaders,daily_repair_orders,Daily repair order count,7.3,count,7,12
+Mechanical,Productivity leaders,daily_repair_orders,Daily repair order count,10.2,count,7,12
+Mechanical,All shops,repair_orders_technician_day,Repair orders per technician per day,2.3,count,8,12
+Mechanical,Ticket size leaders,repair_orders_technician_day,Repair orders per technician per day,2.0,count,8,12
+Mechanical,Productivity leaders,repair_orders_technician_day,Repair orders per technician per day,3.5,count,8,12
+Mechanical,All shops,percentage_with_apprentices,Shops with apprentices,55,percent,9,12
+Mechanical,Ticket size leaders,percentage_with_apprentices,Shops with apprentices,54,percent,9,12
+Mechanical,Productivity leaders,percentage_with_apprentices,Shops with apprentices,26,percent,9,12
+Mechanical,All shops,percentage_tire_sales,Tires as percentage of sales,10,percent,10,12
+Mechanical,Ticket size leaders,percentage_tire_sales,Tires as percentage of sales,8,percent,10,12
+Mechanical,Productivity leaders,percentage_tire_sales,Tires as percentage of sales,9,percent,10,12
+Mechanical,All shops,hours_repair_order,Hours sold per repair order,1.67,hours,11,12
+Mechanical,Ticket size leaders,hours_repair_order,Hours sold per repair order,2.51,hours,11,12
+Mechanical,Productivity leaders,hours_repair_order,Hours sold per repair order,2.06,hours,11,12
+Mechanical,All shops,hours_technician_day,Hours sold per technician per day,4.4,hours,12,12
+Mechanical,Ticket size leaders,hours_technician_day,Hours sold per technician per day,5.6,hours,12,12
+Mechanical,Productivity leaders,hours_technician_day,Hours sold per technician per day,7.1,hours,12,12
+Mechanical,All shops,labour_revenue_paid_tech_hour,Labour revenue per paid technician hour,42.43,cad,13,12
+Mechanical,Ticket size leaders,labour_revenue_paid_tech_hour,Labour revenue per paid technician hour,52.60,cad,13,12
+Mechanical,Productivity leaders,labour_revenue_paid_tech_hour,Labour revenue per paid technician hour,64.76,cad,13,12
+Mechanical,All shops,labour_revenue_vs_door_rate,Labour revenue versus door rate,49,percent,14,12
+Mechanical,Ticket size leaders,labour_revenue_vs_door_rate,Labour revenue versus door rate,62,percent,14,12
+Mechanical,Productivity leaders,labour_revenue_vs_door_rate,Labour revenue versus door rate,78,percent,14,12
+Tire,All shops,sample_size,Number of shops,52,count,1,15
+Tire,Ticket size leaders,sample_size,Number of shops,17,count,1,15
+Tire,Productivity leaders,sample_size,Number of shops,17,count,1,15
+Tire,All shops,years_open,Years open,33,years,2,15
+Tire,Ticket size leaders,years_open,Years open,37,years,2,15
+Tire,Productivity leaders,years_open,Years open,33,years,2,15
+Tire,All shops,number_of_bays,Number of bays,6.3,count,3,15
+Tire,Ticket size leaders,number_of_bays,Number of bays,6.9,count,3,15
+Tire,Productivity leaders,number_of_bays,Number of bays,5.0,count,3,15
+Tire,All shops,days_open,Days open per year,277,days,4,15
+Tire,Ticket size leaders,days_open,Days open per year,278,days,4,15
+Tire,Productivity leaders,days_open,Days open per year,275,days,4,15
+Tire,All shops,number_of_technicians,Number of technicians,5.9,count,5,15
+Tire,Ticket size leaders,number_of_technicians,Number of technicians,6.5,count,5,15
+Tire,Productivity leaders,number_of_technicians,Number of technicians,3.7,count,5,15
+Tire,All shops,technician_to_bay_ratio,Technician-to-bay ratio,0.94,ratio,6,15
+Tire,Ticket size leaders,technician_to_bay_ratio,Technician-to-bay ratio,0.94,ratio,6,15
+Tire,Productivity leaders,technician_to_bay_ratio,Technician-to-bay ratio,0.75,ratio,6,15
+Tire,All shops,daily_repair_orders,Daily repair order count,17.3,count,7,15
+Tire,Ticket size leaders,daily_repair_orders,Daily repair order count,16.9,count,7,15
+Tire,Productivity leaders,daily_repair_orders,Daily repair order count,18.7,count,7,15
+Tire,All shops,repair_orders_technician_day,Repair orders per technician per day,3.0,count,8,15
+Tire,Ticket size leaders,repair_orders_technician_day,Repair orders per technician per day,2.6,count,8,15
+Tire,Productivity leaders,repair_orders_technician_day,Repair orders per technician per day,5.0,count,8,15
+Tire,All shops,percentage_with_apprentices,Shops with apprentices,58,percent,9,15
+Tire,Ticket size leaders,percentage_with_apprentices,Shops with apprentices,59,percent,9,15
+Tire,Productivity leaders,percentage_with_apprentices,Shops with apprentices,47,percent,9,15
+Tire,All shops,percentage_tire_sales,Tires as percentage of sales,38,percent,10,15
+Tire,Ticket size leaders,percentage_tire_sales,Tires as percentage of sales,30,percent,10,15
+Tire,Productivity leaders,percentage_tire_sales,Tires as percentage of sales,34,percent,10,15
+Tire,All shops,hours_repair_order,Hours sold per repair order,1.28,hours,11,15
+Tire,Ticket size leaders,hours_repair_order,Hours sold per repair order,2.01,hours,11,15
+Tire,Productivity leaders,hours_repair_order,Hours sold per repair order,1.61,hours,11,15
+Tire,All shops,hours_technician_day,Hours sold per technician per day,4.8,hours,12,15
+Tire,Ticket size leaders,hours_technician_day,Hours sold per technician per day,5.9,hours,12,15
+Tire,Productivity leaders,hours_technician_day,Hours sold per technician per day,8.1,hours,12,15
+Tire,All shops,labour_revenue_paid_tech_hour,Labour revenue per paid technician hour,50.73,cad,13,15
+Tire,Ticket size leaders,labour_revenue_paid_tech_hour,Labour revenue per paid technician hour,60.74,cad,13,15
+Tire,Productivity leaders,labour_revenue_paid_tech_hour,Labour revenue per paid technician hour,87.30,cad,13,15
+Tire,All shops,labour_revenue_vs_door_rate,Labour revenue versus door rate,53,percent,14,15
+Tire,Ticket size leaders,labour_revenue_vs_door_rate,Labour revenue versus door rate,65,percent,14,15
+Tire,Productivity leaders,labour_revenue_vs_door_rate,Labour revenue versus door rate,90,percent,14,15
