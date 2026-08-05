@@ -121,7 +121,12 @@ def parse_sdmx_json(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             resolved[dimension_ids[position]] = dimension_values[position][value_index]
 
-        geography = resolved.get("GEO") or resolved.get("GEOGRAPHY") or {}
+        geography = (
+            resolved.get("REF_AREA")
+            or resolved.get("GEO")
+            or resolved.get("GEOGRAPHY")
+            or {}
+        )
         characteristic = resolved.get("CHARACTERISTIC") or resolved.get("CHAR") or {}
         value = _first_observation(series)
         if not geography or not characteristic or value is None:
@@ -155,7 +160,9 @@ def _fsa_province(fsa: str) -> str:
 def province_for_geography(flow: str, geography_id: str) -> str:
     code = _geo_code(flow, geography_id)
     if flow == "DF_PR":
-        return PROVINCE_ABBREVIATIONS.get(code[-2:], "")
+        if not geography_id.startswith("2021A0002"):
+            return ""
+        return PROVINCE_ABBREVIATIONS.get(code, "")
     if flow == "DF_CSD":
         return PROVINCE_ABBREVIATIONS.get(code[:2], "")
     return _fsa_province(code)
@@ -196,8 +203,8 @@ class StatCanCensusClient:
         safe_key = quote(key, safe=".+")
         url = f"{API_ROOT}/data/STC_CP,{flow}/{safe_key}?detail=full&format=jsondata"
         request = Request(url, headers={
-            "Accept": "application/json",
-            "User-Agent": "AIA-Canada-Data-Portal/1.0 (data@aiacanada.com)",
+            "Accept": "application/vnd.sdmx.data+json;version=1.0.0-wd",
+            "User-Agent": "AIA-Canada-Data-Portal/1.0",
         })
         for attempt in range(self.retries):
             try:

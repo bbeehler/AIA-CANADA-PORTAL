@@ -13,7 +13,7 @@ def sample_payload():
             "dimensions": {
                 "series": [
                     {"id": "FREQ", "values": [{"id": "A5", "name": "Every five years"}]},
-                    {"id": "GEO", "values": [{"id": "2021A000235", "name": "Ontario"}]},
+                    {"id": "REF_AREA", "values": [{"id": "2021A000235", "name": "Ontario"}]},
                     {"id": "GENDER", "values": [{"id": "1", "name": "Total"}]},
                     {"id": "CHARACTERISTIC", "values": [
                         {"id": "1", "name": "Population, 2021"},
@@ -42,6 +42,8 @@ def test_supported_metric_names_are_matched():
 
 
 def test_geography_province_codes_cover_municipality_and_fsa():
+    assert province_for_geography("DF_PR", "2021A000235") == "ON"
+    assert province_for_geography("DF_PR", "2021A000011124") == ""
     assert province_for_geography("DF_CSD", "2021A00053506008") == "ON"
     assert province_for_geography("DF_FSA", "2021A0011K1A") == "ON"
     assert province_for_geography("DF_FSA", "2021A0011X0A") == "NU"
