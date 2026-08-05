@@ -30,6 +30,7 @@ flowchart TD
 - The market bridge maps a selected geography's province to the closest geography published in the 2015 AIA benchmark. Municipal and FSA selections inherit that regional context and are never presented as local AIA observations.
 - Market-scenario outputs remain client-side calculations. Census household counts and AIA benchmark values retain source labels; vehicle ownership, annual spending, shop count and target share are visibly marked as user assumptions.
 - Resource CMS entries use an explicit internal/external delivery type. Internal HTML is restricted to a presentation-safe allowlist before storage and sanitized again before rendering; scripts, forms, iframes, inline styles, event handlers and unsafe link schemes are removed. External resources require HTTPS links without embedded credentials.
+- Administrator benchmark ingestion has two explicit contracts: regional/shop-size observations and performance-cohort metrics. CSV upload and manual row entry share one server-side validator, and the repository repeats validation before storing a normalized private draft. This prevents the UI from being the only data-quality boundary.
 
 ## Roles
 
@@ -39,6 +40,8 @@ flowchart TD
 | Active member | Read published datasets/resources, export reports, submit aggregate shop data, see own submissions |
 | Analyst | Same member access; reserved for future curated-analysis workflows |
 | Admin | Manage access, review all submissions, stage/archive datasets, manage CMS resources |
+
+Validated administrator dataset drafts are source-file records, not automatically published dashboard observations. Promotion into analytical tables remains a separate governed action so review and dataset-version selection can be added without silently mixing reporting years.
 
 Permanent user deletion removes the Auth account, profile, contribution rows and private contribution objects. It blocks self-deletion and protects the last active administrator. A minimal deletion event remains in the audit log for governance.
 

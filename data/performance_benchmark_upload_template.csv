@@ -1,0 +1,2 @@
+shop_type,cohort,metric_code,metric_label,value,unit,sort_order,source_page
+Mechanical,All shops,hours_repair_order,Hours sold per repair order,1.9,hours,10,1

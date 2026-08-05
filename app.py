@@ -28,6 +28,16 @@ from aia_portal.data import (  # noqa: E402
     format_metric,
     read_template_bytes,
 )
+from aia_portal.dataset_validation import (  # noqa: E402
+    DATASET_SEGMENT,
+    DATASET_TYPE_LABELS,
+    PERFORMANCE_UNITS,
+    SEGMENT_METRIC_COLUMNS,
+    dataset_template_bytes,
+    read_dataset_csv,
+    validate_dataset,
+    validate_dataset_slug,
+)
 from aia_portal.exports import csv_bytes, excel_report_bytes, pdf_report_bytes  # noqa: E402
 from aia_portal.market import calculate_market_scenario  # noqa: E402
 from aia_portal.repository import DemoRepository, SupabaseRepository  # noqa: E402
@@ -1014,6 +1024,121 @@ def contribute_page(repo, user: PortalUser) -> None:
                 st.error(f"The submission could not be saved: {exc}")
 
 
+def dataset_metadata_fields(prefix: str) -> dict[str, object]:
+    c1, c2 = st.columns(2)
+    with c1:
+        title = st.text_input("Dataset title", key=f"{prefix}_title")
+        slug = st.text_input(
+            "Slug",
+            placeholder="2026-shop-productivity",
+            help="Lowercase letters, numbers and hyphens only. Each dataset needs a unique slug.",
+            key=f"{prefix}_slug",
+        )
+    with c2:
+        data_year = st.number_input(
+            "Data year",
+            min_value=1900,
+            max_value=date.today().year,
+            value=date.today().year,
+            key=f"{prefix}_data_year",
+        )
+    description = st.text_area(
+        "Source and methodology description",
+        help="Identify the source, population, collection period and important limitations.",
+        key=f"{prefix}_description",
+    )
+    return {
+        "title": title.strip(),
+        "slug": slug.strip(),
+        "data_year": int(data_year),
+        "description": description.strip(),
+    }
+
+
+def show_dataset_validation(result) -> None:
+    for error in result.errors:
+        st.error(error)
+    for warning in result.warnings:
+        st.warning(warning)
+    if result.valid:
+        st.success(f"Validation passed · {len(result.data):,} row(s) are ready to stage.")
+
+
+def manual_segment_row_form() -> tuple[bool, dict[str, object]]:
+    with st.form("manual_segment_row_form"):
+        st.markdown("#### Add a regional or shop-size benchmark row")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            segment = st.selectbox("Segment", ["Mechanical", "Tire"])
+            shop_size = st.text_input("Shop size", placeholder="1-3 bays")
+        with c2:
+            geography_type = st.selectbox("Geography type", ["region", "national"])
+            geography = st.text_input("Geography", placeholder="Ontario or Canada")
+        with c3:
+            affiliation = st.text_input("Affiliation", value="All")
+            sample_size = st.number_input("Sample size", min_value=0, value=None, step=1)
+
+        values: dict[str, object] = {}
+        metric_columns = st.columns(3)
+        for index, metric_code in enumerate(SEGMENT_METRIC_COLUMNS):
+            label, unit = METRICS[metric_code]
+            options: dict[str, object] = {"value": None, "step": 1.0 if unit == "percent" else 0.1}
+            if unit == "percent":
+                options.update({"min_value": 0.0, "max_value": 100.0})
+            else:
+                options.update({"min_value": 0.0})
+            with metric_columns[index % 3]:
+                values[metric_code] = st.number_input(label, key=f"manual_{metric_code}", **options)
+
+        source_page = st.number_input(
+            "Source page (optional)", min_value=1, value=None, step=1, key="manual_segment_source_page"
+        )
+        add_row = st.form_submit_button("Add validated row", type="primary")
+
+    row = {
+        "segment": segment,
+        "shop_size": shop_size,
+        "geography_type": geography_type,
+        "geography": geography,
+        "affiliation": affiliation,
+        "sample_size": sample_size,
+        **values,
+        "source_page": source_page,
+    }
+    return add_row, row
+
+
+def manual_performance_row_form() -> tuple[bool, dict[str, object]]:
+    with st.form("manual_performance_row_form"):
+        st.markdown("#### Add a performance cohort benchmark row")
+        c1, c2 = st.columns(2)
+        with c1:
+            shop_type = st.selectbox("Shop type", ["Mechanical", "Tire"])
+            cohort = st.text_input("Cohort", placeholder="All shops")
+            metric_code = st.text_input("Metric code", placeholder="hours_repair_order")
+            metric_label = st.text_input("Metric label", placeholder="Hours sold per repair order")
+        with c2:
+            value = st.number_input("Value", min_value=0.0, value=0.0, step=0.1)
+            unit = st.selectbox("Unit", PERFORMANCE_UNITS)
+            sort_order = st.number_input("Sort order", min_value=0, value=10, step=10)
+            source_page = st.number_input(
+                "Source page (optional)", min_value=1, value=None, step=1,
+                key="manual_performance_source_page",
+            )
+        add_row = st.form_submit_button("Add validated row", type="primary")
+
+    return add_row, {
+        "shop_type": shop_type,
+        "cohort": cohort,
+        "metric_code": metric_code,
+        "metric_label": metric_label,
+        "value": value,
+        "unit": unit,
+        "sort_order": sort_order,
+        "source_page": source_page,
+    }
+
+
 def admin_page(repo, user: PortalUser) -> None:
     page_intro(
         "Administration",
@@ -1153,10 +1278,16 @@ def admin_page(repo, user: PortalUser) -> None:
                 st.error(f"The private file could not be retrieved: {exc}")
 
     with datasets_tab:
+        dataset_notice = st.session_state.pop("admin_dataset_notice", None)
+        if dataset_notice:
+            st.success(dataset_notice)
         st.subheader("Dataset lifecycle")
         datasets = repo.datasets()
         st.dataframe(pd.DataFrame(datasets), hide_index=True, width="stretch")
-        st.caption("Archive is the default removal action so provenance and audit history remain intact.")
+        st.caption(
+            "Archive is the default removal action so provenance and audit history remain intact. "
+            "New source files are stored privately as validated drafts."
+        )
         if datasets:
             labels = {f"{item.get('title')} · {item.get('status')} · {item.get('id')}": item for item in datasets}
             with st.form("dataset_status_form"):
@@ -1169,27 +1300,155 @@ def admin_page(repo, user: PortalUser) -> None:
                     st.success("Dataset lifecycle updated.")
                 except Exception as exc:
                     st.error(f"Could not update the dataset: {exc}")
-        with st.expander("Stage a new dataset file"):
-            with st.form("new_dataset_form"):
-                title = st.text_input("Dataset title")
-                slug = st.text_input("Slug", placeholder="2026-shop-productivity")
-                data_year = st.number_input("Data year", min_value=2000, max_value=date.today().year, value=date.today().year)
-                description = st.text_area("Description")
-                dataset_file = st.file_uploader("Curated CSV", type=["csv"], key="admin_dataset_file")
-                stage = st.form_submit_button("Stage as draft", type="primary")
-            if stage:
-                if not title or not slug or not dataset_file:
-                    st.error("Title, slug and a curated CSV are required.")
+
+        st.subheader("Add a governed benchmark dataset")
+        st.caption(
+            "Uploaded and manually entered rows use the same validation rules. Valid records are staged as drafts "
+            "for AIA Canada review."
+        )
+        upload_dataset_tab, manual_dataset_tab = st.tabs(["Upload validated CSV", "Enter rows manually"])
+
+        with upload_dataset_tab:
+            upload_type = st.selectbox(
+                "Dataset type",
+                list(DATASET_TYPE_LABELS),
+                format_func=DATASET_TYPE_LABELS.get,
+                key="admin_upload_dataset_type",
+            )
+            template_filename = f"{upload_type}_benchmark_upload_template.csv"
+            st.download_button(
+                "Download CSV template",
+                dataset_template_bytes(upload_type),
+                file_name=template_filename,
+                mime="text/csv",
+            )
+            st.caption("The template contains one example row. Replace or remove it before uploading your data.")
+            dataset_file = st.file_uploader(
+                "Completed CSV template", type=["csv"], key="admin_dataset_file"
+            )
+            upload_validation = None
+            if dataset_file:
+                payload = dataset_file.getvalue()
+                if len(payload) > 25 * 1024 * 1024:
+                    st.error("The dataset exceeds the 25 MB administrator upload limit.")
                 else:
                     try:
-                        repo.stage_dataset(
-                            title=title.strip(), slug=slug.strip(), data_year=int(data_year),
-                            description=description.strip(), filename=dataset_file.name,
-                            payload=dataset_file.getvalue(), created_by=user.id,
-                        )
-                        st.success("Dataset staged as draft. Validate and publish only after review.")
-                    except Exception as exc:
-                        st.error(f"Could not stage the dataset: {exc}")
+                        upload_frame = read_dataset_csv(payload)
+                        upload_validation = validate_dataset(upload_frame, upload_type)
+                        show_dataset_validation(upload_validation)
+                        if upload_validation.valid:
+                            st.dataframe(upload_validation.data.head(100), hide_index=True, width="stretch")
+                            if len(upload_validation.data) > 100:
+                                st.caption("Preview is limited to the first 100 rows.")
+                    except ValueError as exc:
+                        st.error(str(exc))
+
+            if upload_validation and upload_validation.valid:
+                with st.form("upload_dataset_metadata_form"):
+                    upload_metadata = dataset_metadata_fields("upload_dataset")
+                    stage_upload = st.form_submit_button("Stage validated CSV as draft", type="primary")
+                if stage_upload:
+                    if not all([
+                        upload_metadata["title"], upload_metadata["slug"], upload_metadata["description"]
+                    ]):
+                        st.error("Title, slug and source/methodology description are required.")
+                    else:
+                        try:
+                            validated_slug = validate_dataset_slug(str(upload_metadata["slug"]))
+                            repo.stage_dataset(
+                                title=str(upload_metadata["title"]),
+                                slug=validated_slug,
+                                data_year=int(upload_metadata["data_year"]),
+                                dataset_type=upload_type,
+                                description=str(upload_metadata["description"]),
+                                filename=dataset_file.name,
+                                payload=csv_bytes(upload_validation.data),
+                                created_by=user.id,
+                            )
+                            st.session_state.admin_dataset_notice = (
+                                f"Validated dataset staged as draft · {len(upload_validation.data):,} row(s)."
+                            )
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Could not stage the dataset: {exc}")
+
+        with manual_dataset_tab:
+            manual_type = st.selectbox(
+                "Dataset type",
+                list(DATASET_TYPE_LABELS),
+                format_func=DATASET_TYPE_LABELS.get,
+                key="admin_manual_dataset_type",
+            )
+            manual_rows_key = f"admin_manual_rows_{manual_type}"
+            manual_rows = st.session_state.setdefault(manual_rows_key, [])
+            if manual_type == DATASET_SEGMENT:
+                add_manual_row, manual_row = manual_segment_row_form()
+            else:
+                add_manual_row, manual_row = manual_performance_row_form()
+
+            if add_manual_row:
+                row_validation = validate_dataset(pd.DataFrame([manual_row]), manual_type)
+                show_dataset_validation(row_validation)
+                if row_validation.valid:
+                    manual_rows.append(row_validation.data.iloc[0].to_dict())
+                    st.success(f"Row added · {len(manual_rows):,} row(s) in the current draft.")
+
+            if manual_rows:
+                manual_frame = pd.DataFrame(manual_rows)
+                manual_validation = validate_dataset(manual_frame, manual_type)
+                st.markdown("#### Current manual draft")
+                show_dataset_validation(manual_validation)
+                if manual_validation.valid:
+                    st.dataframe(manual_validation.data, hide_index=True, width="stretch")
+                    st.download_button(
+                        "Download current draft CSV",
+                        csv_bytes(manual_validation.data),
+                        file_name=f"manual_{manual_type}_draft.csv",
+                        mime="text/csv",
+                    )
+                b1, b2 = st.columns(2)
+                with b1:
+                    if st.button("Remove last row", width="stretch"):
+                        manual_rows.pop()
+                        st.rerun()
+                with b2:
+                    if st.button("Clear manual draft", width="stretch"):
+                        manual_rows.clear()
+                        st.rerun()
+
+                if manual_validation.valid:
+                    with st.form("manual_dataset_metadata_form"):
+                        manual_metadata = dataset_metadata_fields("manual_dataset")
+                        stage_manual = st.form_submit_button("Stage manual dataset as draft", type="primary")
+                    if stage_manual:
+                        if not all([
+                            manual_metadata["title"],
+                            manual_metadata["slug"],
+                            manual_metadata["description"],
+                        ]):
+                            st.error("Title, slug and source/methodology description are required.")
+                        else:
+                            try:
+                                validated_slug = validate_dataset_slug(str(manual_metadata["slug"]))
+                                repo.stage_dataset(
+                                    title=str(manual_metadata["title"]),
+                                    slug=validated_slug,
+                                    data_year=int(manual_metadata["data_year"]),
+                                    dataset_type=manual_type,
+                                    description=str(manual_metadata["description"]),
+                                    filename=f"{validated_slug}.csv",
+                                    payload=csv_bytes(manual_validation.data),
+                                    created_by=user.id,
+                                )
+                                manual_rows.clear()
+                                st.session_state.admin_dataset_notice = (
+                                    f"Manual dataset staged as draft · {len(manual_validation.data):,} row(s)."
+                                )
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"Could not stage the manual dataset: {exc}")
+            else:
+                st.info("Add at least one valid row to build a manual dataset draft.")
 
         st.subheader("Statistics Canada demographic sync")
         sync_runs = repo.demographic_sync_runs()

@@ -28,6 +28,23 @@ def test_demo_admin_centre_renders_without_exceptions():
     assert not app.exception
 
 
+def test_demo_admin_can_add_a_valid_manual_dataset_row():
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    next(button for button in app.button if button.label == "View as admin").click().run()
+    portal_radio(app).set_value("Admin Centre").run()
+
+    next(field for field in app.text_input if field.label == "Shop size").set_value("1-3 bays")
+    next(field for field in app.text_input if field.label == "Geography").set_value("Ontario")
+    next(
+        field for field in app.number_input
+        if field.label == "Hours sold / technician / day"
+    ).set_value(5.2)
+    next(button for button in app.button if button.label == "Add validated row").click().run()
+
+    assert not app.exception
+    assert any("Row added" in message.value for message in app.success)
+
+
 def test_market_demographics_links_to_benchmark_explorer():
     app = AppTest.from_file(APP, default_timeout=30).run()
     next(button for button in app.button if button.label == "View as member").click().run()

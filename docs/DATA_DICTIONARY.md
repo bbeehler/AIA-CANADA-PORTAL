@@ -85,3 +85,17 @@ Scenario exports identify every row as `Statistics Canada 2021`, `AIA 2015`, `Us
 | `status` | `draft`, `published`, or `archived`; only published resources are member-visible |
 
 HTML articles allow headings, paragraphs, emphasis, lists, blockquotes, code, tables and HTTPS/mail links. The application strips executable tags and attributes before saving and sanitizes the stored content again before display.
+
+## Governed administrator datasets
+
+Every staged administrator dataset records a `dataset_type`:
+
+| Value | Contract |
+|---|---|
+| `mixed` | Existing legacy dataset containing both supported benchmark structures |
+| `segment` | Regional, national, shop-size and affiliation benchmark rows |
+| `performance` | Shop-type, cohort and metric-code performance rows |
+
+The segment contract uses the columns documented under **Historical benchmark dataset → Segment observations**. The performance contract requires `shop_type`, `cohort`, `metric_code`, `metric_label`, `value`, `unit`, `sort_order`, and `source_page`. Supported units are `count`, `hours`, `percent`, `ratio`, `cad`, `days`, and `years`.
+
+Validation requires exact headers and rejects empty files, more than 10,000 rows, unsupported categories or units, negative metrics, percentages outside 0–100, non-integer counts/order/page values, duplicate natural keys, malformed metric codes and spreadsheet formula-like text. `source_page` may be blank but generates a provenance warning.

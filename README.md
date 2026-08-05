@@ -19,6 +19,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 - Page-level provenance for all values transcribed from the 2015 AIA Canada report
 - Statistics Canada Census Profile integration for provinces, municipalities and three-character postal regions
 - Database-filtered municipality/FSA search, linked AIA regional benchmarks and an explicit market-assumption scenario
+- Governed benchmark ingestion with typed CSV templates, strict validation and manual row-entry drafts
 - Demo member/admin workspaces for stakeholder review
 
 ## Local demo
@@ -87,6 +88,8 @@ Administrators can edit a member's email, profile, role and membership status fr
 
 Administrators add member resources from **Admin Centre → Content CMS**. Choose **In-portal article** for Markdown or sanitized HTML, or **External link** for a complete HTTPS URL. Drafts may be incomplete; publishing requires the selected destination to contain content or a valid link.
 
+Administrators stage new benchmark source files from **Admin Centre → Datasets**. Choose the regional/shop-size or performance-cohort contract, download its CSV template, and upload the completed file. The same rules validate manual row entry. Valid drafts are normalized before private Storage upload; invalid columns, values, ranges, duplicates, slugs and formula-like text are rejected.
+
 ## Deploy on Streamlit Community Cloud
 
 1. Push this directory to the GitHub repository and select `app.py` as the entrypoint in Streamlit.
@@ -113,6 +116,7 @@ Administrators add member resources from **Admin Centre → Content CMS**. Choos
 | `scripts/seed_data.py` | Trusted operator seed loader |
 | `scripts/sync_statcan_demographics.py` | Trusted Statistics Canada demographic synchronizer |
 | `data/` | Source-transcribed benchmarks and member template |
+| `data/*benchmark_upload_template.csv` | Governed administrator dataset templates |
 | `docs/ARCHITECTURE.md` | Trust boundaries, roles and hardening backlog |
 | `docs/DATA_DICTIONARY.md` | Benchmark and contribution field definitions |
 | `docs/MARKET_LINKAGE.md` | Rules separating direct demographic/benchmark links from scenario assumptions |

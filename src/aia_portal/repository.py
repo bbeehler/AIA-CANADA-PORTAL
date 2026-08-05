@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, MutableMapping
 from uuid import uuid4
@@ -10,6 +9,7 @@ import pandas as pd
 
 from .auth import PortalUser
 from .data import load_performance_benchmarks, load_segment_benchmarks
+from .dataset_validation import read_dataset_csv, validate_dataset, validate_dataset_slug
 
 
 DEFAULT_RESOURCES = [
@@ -84,6 +84,7 @@ class DemoRepository:
             "title": "2015 Productivity Benchmarks",
             "description": "Regional, shop-size and high-performance cohort benchmarks.",
             "data_year": 2015,
+            "dataset_type": "mixed",
             "status": "published",
             "version": 1,
             "row_count": 114,
@@ -300,19 +301,26 @@ class DemoRepository:
         title: str,
         slug: str,
         data_year: int,
+        dataset_type: str,
         description: str,
         filename: str,
         payload: bytes,
         created_by: str,
     ) -> dict[str, Any]:
-        frame = pd.read_csv(BytesIO(payload))
+        slug = validate_dataset_slug(slug)
+        frame = read_dataset_csv(payload)
+        validation = validate_dataset(frame, dataset_type)
+        if not validation.valid:
+            raise ValueError("Dataset validation failed: " + " ".join(validation.errors))
+        normalized_payload = validation.data.to_csv(index=False).encode("utf-8")
         record = {
             "id": str(uuid4()), "slug": slug, "title": title, "description": description,
-            "data_year": data_year, "status": "draft", "version": 1,
-            "row_count": len(frame), "source_filename": Path(filename).name,
+            "data_year": data_year, "dataset_type": dataset_type, "status": "draft", "version": 1,
+            "row_count": len(validation.data), "source_filename": Path(filename).name,
             "created_by": created_by, "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self.state["demo_datasets"].append(record)
+        self.state.setdefault("demo_dataset_payloads", {})[record["id"]] = normalized_payload
         return record
 
 
@@ -498,25 +506,31 @@ class SupabaseRepository:
         title: str,
         slug: str,
         data_year: int,
+        dataset_type: str,
         description: str,
         filename: str,
         payload: bytes,
         created_by: str,
     ) -> dict[str, Any]:
-        frame = pd.read_csv(BytesIO(payload))
+        slug = validate_dataset_slug(slug)
+        frame = read_dataset_csv(payload)
+        validation = validate_dataset(frame, dataset_type)
+        if not validation.valid:
+            raise ValueError("Dataset validation failed: " + " ".join(validation.errors))
+        normalized_payload = validation.data.to_csv(index=False).encode("utf-8")
         dataset_id = str(uuid4())
         safe_name = Path(filename).name.replace(" ", "_")
         storage_path = f"{dataset_id}/{safe_name}"
         self.client.storage.from_("admin-datasets").upload(
             path=storage_path,
-            file=payload,
+            file=normalized_payload,
             file_options={"content-type": "text/csv", "upsert": "false"},
         )
         try:
             response = self.client.table("datasets").insert({
                 "id": dataset_id, "slug": slug, "title": title, "description": description,
-                "data_year": data_year, "status": "draft", "version": 1,
-                "row_count": len(frame), "source_filename": safe_name,
+                "data_year": data_year, "dataset_type": dataset_type, "status": "draft", "version": 1,
+                "row_count": len(validation.data), "source_filename": safe_name,
                 "storage_path": storage_path, "created_by": created_by,
             }).execute()
             return dict((response.data or [{}])[0])
