@@ -13,6 +13,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 - Upload validation and PII-column rejection
 - Private contribution storage and AIA Canada approval queue
 - Admin member access, submission review, dataset staging/archive and resource CMS
+- Secure administrator editing and permanent deletion of member accounts
 - Supabase schema with explicit Data API grants, RLS policies and private Storage policies
 - Page-level provenance for all values transcribed from the 2015 AIA Canada report
 - Demo member/admin workspaces for stakeholder review
@@ -40,6 +41,12 @@ Requirements: Node/npm, Supabase project access, and the Supabase CLI.
    npx supabase@2.111.0 db push
    ```
 
+   Deploy the authenticated user-administration Edge Function:
+
+   ```bash
+   npx supabase@2.111.0 functions deploy admin-users
+   ```
+
 2. Create or invite the first administrator in **Supabase Dashboard → Authentication → Users**. Then run this once in the SQL Editor, using the administrator’s email:
 
    ```sql
@@ -61,6 +68,8 @@ Requirements: Node/npm, Supabase project access, and the Supabase CLI.
    Legacy projects can use `SUPABASE_SERVICE_ROLE_KEY` instead. Never add either secret to Streamlit.
 
 4. Confirm the first admin can sign in, then approve other member profiles from **Admin Centre → Users & access**.
+
+Administrators can edit a member's email, profile, role and membership status from the same screen. Permanent deletion removes the Auth account, profile, private contribution records and contribution files. The current administrator and the last active administrator are protected from deletion.
 
 ## Deploy on Streamlit Community Cloud
 

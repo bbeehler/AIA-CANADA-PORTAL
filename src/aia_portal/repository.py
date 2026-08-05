@@ -57,15 +57,18 @@ class DemoRepository:
         }])
         self.state.setdefault("demo_users", [
             {
-                "id": "demo-member", "full_name": "Jordan Martin", "organization": "Maple Auto Service",
+                "id": "demo-member", "email": "member@demo.aiacanada.com",
+                "full_name": "Jordan Martin", "organization": "Maple Auto Service",
                 "province": "ON", "role": "member", "membership_status": "active", "created_at": "2026-07-18",
             },
             {
-                "id": "demo-pending", "full_name": "Sam Roy", "organization": "Northern Garage",
+                "id": "demo-pending", "email": "pending@demo.aiacanada.com",
+                "full_name": "Sam Roy", "organization": "Northern Garage",
                 "province": "QC", "role": "member", "membership_status": "pending", "created_at": "2026-08-02",
             },
             {
-                "id": "demo-admin", "full_name": "Avery Chen", "organization": "AIA Canada",
+                "id": "demo-admin", "email": "admin@demo.aiacanada.com",
+                "full_name": "Avery Chen", "organization": "AIA Canada",
                 "province": "ON", "role": "admin", "membership_status": "active", "created_at": "2026-05-01",
             },
         ])
@@ -129,6 +132,53 @@ class DemoRepository:
                 profile["role"] = role
                 return
         raise KeyError("Member not found")
+
+    def update_user(
+        self,
+        user_id: str,
+        *,
+        email: str,
+        full_name: str,
+        organization: str,
+        province: str,
+        membership_status: str,
+        role: str,
+    ) -> None:
+        for profile in self.state["demo_users"]:
+            if profile["id"] == user_id:
+                profile.update({
+                    "email": email,
+                    "full_name": full_name,
+                    "organization": organization,
+                    "province": province,
+                    "membership_status": membership_status,
+                    "role": role,
+                })
+                return
+        raise KeyError("Member not found")
+
+    def delete_user(self, user_id: str) -> None:
+        target = next((item for item in self.state["demo_users"] if item["id"] == user_id), None)
+        if not target:
+            raise KeyError("Member not found")
+        if target.get("role") == "admin" and target.get("membership_status") == "active":
+            active_admins = sum(
+                item.get("role") == "admin" and item.get("membership_status") == "active"
+                for item in self.state["demo_users"]
+            )
+            if active_admins <= 1:
+                raise ValueError("Create another active administrator before removing the last one")
+        deleted_contribution_ids = {
+            item["id"]
+            for item in self.state["demo_contributions"]
+            if item["contributor_id"] == user_id
+        }
+        self.state["demo_contributions"] = [
+            item for item in self.state["demo_contributions"] if item["contributor_id"] != user_id
+        ]
+        for contribution_id in deleted_contribution_ids:
+            self.state["demo_contribution_payloads"].pop(contribution_id, None)
+        self.state["demo_users"] = [item for item in self.state["demo_users"] if item["id"] != user_id]
 
     def review_contribution(self, contribution_id: str, status: str, admin_notes: str) -> None:
         for record in self.state["demo_contributions"]:
@@ -260,6 +310,37 @@ class SupabaseRepository:
             "new_membership_status": membership_status,
             "new_role": role,
         }).execute()
+
+    def update_user(
+        self,
+        user_id: str,
+        *,
+        email: str,
+        full_name: str,
+        organization: str,
+        province: str,
+        membership_status: str,
+        role: str,
+    ) -> None:
+        self.client.functions.invoke("admin-users", {
+            "body": {
+                "action": "update",
+                "user_id": user_id,
+                "email": email,
+                "full_name": full_name,
+                "organization": organization,
+                "province": province,
+                "membership_status": membership_status,
+                "role": role,
+            },
+            "responseType": "json",
+        })
+
+    def delete_user(self, user_id: str) -> None:
+        self.client.functions.invoke("admin-users", {
+            "body": {"action": "delete", "user_id": user_id},
+            "responseType": "json",
+        })
 
     def review_contribution(self, contribution_id: str, status: str, admin_notes: str) -> None:
         self.client.table("contributions").update({

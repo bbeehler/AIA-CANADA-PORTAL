@@ -16,6 +16,7 @@ flowchart TD
 
 - Streamlit receives only the Supabase URL and publishable key. It never receives a secret/service-role key.
 - Every normal database and Storage request runs as the signed-in user. Postgres and Storage RLS are authoritative.
+- Auth-account edits and deletion go through the `admin-users` Edge Function. It verifies the caller with Supabase Auth, confirms an active administrator profile, and only then uses the server-only Auth administration API.
 - Authorization uses the `profiles.role` and `profiles.membership_status` columns. It never trusts user-editable Auth `user_metadata`.
 - A verified Auth user can still be `pending` or `suspended`; authentication does not imply portal authorization.
 - Raw member files are private. Owners can read their own submissions; active admins can review all submissions.
@@ -30,6 +31,8 @@ flowchart TD
 | Active member | Read published datasets/resources, export reports, submit aggregate shop data, see own submissions |
 | Analyst | Same member access; reserved for future curated-analysis workflows |
 | Admin | Manage access, review all submissions, stage/archive datasets, manage CMS resources |
+
+Permanent user deletion removes the Auth account, profile, contribution rows and private contribution objects. It blocks self-deletion and protects the last active administrator. A minimal deletion event remains in the audit log for governance.
 
 ## Production hardening backlog
 

@@ -598,27 +598,84 @@ def admin_page(repo, user: PortalUser) -> None:
     ])
     with users_tab:
         st.subheader("Member directory")
+        user_notice = st.session_state.pop("admin_user_notice", None)
+        if user_notice:
+            st.success(user_notice)
         st.dataframe(pd.DataFrame(profiles), hide_index=True, width="stretch")
         if profiles:
-            labels = {f"{p.get('full_name')} · {p.get('organization')} · {p.get('id')}": p for p in profiles}
-            with st.form("member_admin_form"):
-                selected_label = st.selectbox("Member", labels)
-                selected = labels[selected_label]
+            labels = {
+                f"{p.get('full_name') or p.get('email') or 'Unnamed user'} · "
+                f"{p.get('email') or p.get('id')}": p
+                for p in profiles
+            }
+            selected_label = st.selectbox("User", labels)
+            selected = labels[selected_label]
+            editing_self = selected["id"] == user.id
+            with st.form("user_admin_form"):
+                email = st.text_input("Email", value=selected.get("email", ""))
+                full_name = st.text_input("Full name", value=selected.get("full_name", ""))
                 c1, c2 = st.columns(2)
                 with c1:
+                    organization = st.text_input("Organization", value=selected.get("organization", ""))
                     membership_status = st.selectbox(
                         "Membership status", ["pending", "active", "suspended"],
                         index=["pending", "active", "suspended"].index(selected.get("membership_status", "pending")),
+                        disabled=editing_self,
                     )
                 with c2:
-                    role = st.selectbox("Portal role", ["member", "analyst", "admin"], index=["member", "analyst", "admin"].index(selected.get("role", "member")))
-                save = st.form_submit_button("Save access decision", type="primary")
+                    province = st.text_input("Province / territory", value=selected.get("province", ""))
+                    role = st.selectbox(
+                        "Portal role", ["member", "analyst", "admin"],
+                        index=["member", "analyst", "admin"].index(selected.get("role", "member")),
+                        disabled=editing_self,
+                    )
+                if editing_self:
+                    st.caption("For safety, you cannot demote or suspend your own administrator account.")
+                save = st.form_submit_button("Save user", type="primary")
             if save:
                 try:
-                    repo.set_member_status(selected["id"], membership_status, role)
-                    st.success("Member access updated.")
+                    repo.update_user(
+                        selected["id"],
+                        email=email.strip(),
+                        full_name=full_name.strip(),
+                        organization=organization.strip(),
+                        province=province.strip(),
+                        membership_status=membership_status,
+                        role=role,
+                    )
+                    st.session_state.admin_user_notice = "User details and access were updated."
+                    st.rerun()
                 except Exception as exc:
-                    st.error(f"Could not update access: {exc}")
+                    st.error(f"Could not update the user: {exc}")
+
+            with st.expander("Delete user permanently"):
+                st.warning(
+                    "This permanently removes the Supabase login, portal profile, private contributions "
+                    "and uploaded contribution files. This cannot be undone."
+                )
+                if editing_self:
+                    st.info("You cannot delete the account you are currently using.")
+                confirmation = st.text_input(
+                    "Type DELETE to confirm",
+                    key=f"delete_user_confirmation_{selected['id']}",
+                    disabled=editing_self,
+                )
+                delete_user = st.button(
+                    "Permanently delete user",
+                    key=f"delete_user_{selected['id']}",
+                    disabled=editing_self,
+                )
+                if delete_user:
+                    if confirmation != "DELETE":
+                        st.error("Type DELETE exactly before continuing.")
+                    else:
+                        try:
+                            deleted_name = selected.get("full_name") or selected.get("email") or "User"
+                            repo.delete_user(selected["id"])
+                            st.session_state.admin_user_notice = f"{deleted_name} was permanently deleted."
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Could not delete the user: {exc}")
 
     with submissions_tab:
         st.subheader("Private review queue")

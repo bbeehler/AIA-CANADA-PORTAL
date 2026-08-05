@@ -32,11 +32,14 @@
 
 1. Pending user can sign in but cannot open portal data.
 2. Admin can activate that profile; user can sign in again and access published data.
-3. Active member cannot read draft or archived datasets/resources.
-4. Active member can upload only CSV/XLSX to their own contribution folder.
-5. Active member cannot read another member’s contribution metadata or file.
-6. Admin can review all submissions and set status.
-7. Approval does not make a raw file visible to members.
-8. Member cannot stage datasets or publish CMS resources.
-9. Admin can stage a CSV as draft and archive a dataset.
-10. CSV, XLSX and PDF exports include source context and the historical-data warning.
+3. Admin can edit a user's email and profile, suspend access, and assign an allowed role.
+4. Admin cannot demote or delete their own account or remove the last active administrator.
+5. Admin can permanently delete a test user and confirm its Auth user, profile, contributions and contribution files are removed.
+6. Active member cannot read draft or archived datasets/resources.
+7. Active member can upload only CSV/XLSX to their own contribution folder.
+8. Active member cannot read another member’s contribution metadata or file.
+9. Admin can review all submissions and set status.
+10. Approval does not make a raw file visible to members.
+11. Member cannot stage datasets or publish CMS resources.
+12. Admin can stage a CSV as draft and archive a dataset.
+13. CSV, XLSX and PDF exports include source context and the historical-data warning.

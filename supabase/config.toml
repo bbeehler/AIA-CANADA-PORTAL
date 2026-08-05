@@ -24,3 +24,8 @@ minimum_password_length = 10
 enable_signup = false
 double_confirm_changes = true
 enable_confirmations = true
+
+[functions.admin-users]
+# The platform verifies the user JWT first; the function then verifies the user
+# with Auth again and checks the caller's active administrator profile.
+verify_jwt = true
