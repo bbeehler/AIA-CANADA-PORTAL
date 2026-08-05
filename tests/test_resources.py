@@ -5,6 +5,8 @@ def test_default_published_resources_are_actionable():
     for resource in DEFAULT_RESOURCES:
         if resource["status"] == "published":
             assert resource.get("external_url") or resource.get("content")
+            assert resource["delivery_type"] in {"internal", "external"}
+            assert resource["content_format"] in {"markdown", "html"}
 
 
 def test_demo_resource_content_is_preserved():

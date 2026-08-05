@@ -29,6 +29,7 @@ flowchart TD
 - Municipality and FSA lookup is filtered in Supabase and capped at 100 results per search; the browser does not receive the full national geography list.
 - The market bridge maps a selected geography's province to the closest geography published in the 2015 AIA benchmark. Municipal and FSA selections inherit that regional context and are never presented as local AIA observations.
 - Market-scenario outputs remain client-side calculations. Census household counts and AIA benchmark values retain source labels; vehicle ownership, annual spending, shop count and target share are visibly marked as user assumptions.
+- Resource CMS entries use an explicit internal/external delivery type. Internal HTML is restricted to a presentation-safe allowlist before storage and sanitized again before rendering; scripts, forms, iframes, inline styles, event handlers and unsafe link schemes are removed. External resources require HTTPS links without embedded credentials.
 
 ## Roles
 

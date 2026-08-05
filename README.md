@@ -13,6 +13,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 - Upload validation and PII-column rejection
 - Private contribution storage and AIA Canada approval queue
 - Admin member access, submission review, dataset staging/archive and resource CMS
+- In-portal Markdown/sanitized-HTML articles and validated external HTTPS resources
 - Secure administrator editing and permanent deletion of member accounts
 - Supabase schema with explicit Data API grants, RLS policies and private Storage policies
 - Page-level provenance for all values transcribed from the 2015 AIA Canada report
@@ -83,6 +84,8 @@ Requirements: Node/npm, Supabase project access, and the Supabase CLI.
 5. Confirm the first admin can sign in, then approve other member profiles from **Admin Centre → Users & access**.
 
 Administrators can edit a member's email, profile, role and membership status from the same screen. Permanent deletion removes the Auth account, profile, private contribution records and contribution files. The current administrator and the last active administrator are protected from deletion.
+
+Administrators add member resources from **Admin Centre → Content CMS**. Choose **In-portal article** for Markdown or sanitized HTML, or **External link** for a complete HTTPS URL. Drafts may be incomplete; publishing requires the selected destination to contain content or a valid link.
 
 ## Deploy on Streamlit Community Cloud
 

@@ -73,3 +73,15 @@ The first metric catalogue covers population and growth, density, households, br
 ## Linked market scenario
 
 Scenario exports identify every row as `Statistics Canada 2021`, `AIA 2015`, `User assumption`, or `Calculated scenario`. Estimated vehicles, annual auto care pool, pool per serving shop and target-share revenue are calculated planning lenses; they are not stored source observations and must not be described as forecasts.
+
+## Resource CMS
+
+| Field | Meaning |
+|---|---|
+| `delivery_type` | `internal` for an article rendered in the portal or `external` for a link opened on another website |
+| `content_format` | `markdown` or sanitized `html`; applies to internal articles |
+| `content` | Internal article body; blank for external links |
+| `external_url` | Complete HTTPS destination; blank for internal articles |
+| `status` | `draft`, `published`, or `archived`; only published resources are member-visible |
+
+HTML articles allow headings, paragraphs, emphasis, lists, blockquotes, code, tables and HTTPS/mail links. The application strips executable tags and attributes before saving and sanitizes the stored content again before display.

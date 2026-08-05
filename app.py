@@ -31,6 +31,14 @@ from aia_portal.data import (  # noqa: E402
 from aia_portal.exports import csv_bytes, excel_report_bytes, pdf_report_bytes  # noqa: E402
 from aia_portal.market import calculate_market_scenario  # noqa: E402
 from aia_portal.repository import DemoRepository, SupabaseRepository  # noqa: E402
+from aia_portal.resources import (  # noqa: E402
+    DELIVERY_EXTERNAL,
+    FORMAT_HTML,
+    resource_content_format,
+    resource_delivery_type,
+    sanitize_resource_html,
+    validate_external_url,
+)
 from aia_portal.ui import inject_theme, metric_card, page_intro, source_note  # noqa: E402
 from aia_portal.validation import read_uploaded_table, validate_shop_upload  # noqa: E402
 
@@ -96,6 +104,17 @@ def chart(fig: go.Figure) -> None:
             "toImageButtonOptions": {"format": "png", "filename": "aia-canada-chart", "scale": 2},
         },
     )
+
+
+def render_resource_content(content: str, content_format: str) -> None:
+    if content_format == FORMAT_HTML:
+        safe_html = sanitize_resource_html(content)
+        if safe_html:
+            st.markdown(safe_html, unsafe_allow_html=True)
+        else:
+            st.caption("This article has no displayable content.")
+        return
+    st.markdown(content)
 
 
 def set_user(user: PortalUser, tokens: SessionTokens | None = None) -> None:
@@ -883,13 +902,19 @@ def resources_page(repo, user: PortalUser) -> None:
                     st.subheader(item.get("title", "Untitled"))
                     st.write(item.get("summary", ""))
                     st.caption(item.get("resource_type", "Resource"))
-                    url = (item.get("external_url") or "").strip()
-                    content = (item.get("content") or "").strip()
-                    if url:
-                        st.link_button("Open resource", url, width="stretch")
+                    delivery_type = resource_delivery_type(item)
+                    url = str(item.get("external_url") or "").strip()
+                    content = str(item.get("content") or "").strip()
+                    if delivery_type == DELIVERY_EXTERNAL and url:
+                        try:
+                            safe_url = validate_external_url(url)
+                        except ValueError:
+                            st.caption("This external resource link needs administrator review.")
+                        else:
+                            st.link_button("Open external resource", safe_url, width="stretch")
                     elif content:
                         with st.popover("Read in portal", width="stretch"):
-                            st.markdown(content)
+                            render_resource_content(content, resource_content_format(item))
                     else:
                         st.caption("Resource details are being prepared by AIA Canada.")
 
@@ -1179,11 +1204,21 @@ def admin_page(repo, user: PortalUser) -> None:
         st.code("python scripts/sync_statcan_demographics.py", language="bash")
 
     with cms_tab:
-        st.subheader("Published resources")
+        resource_notice = st.session_state.pop("admin_resource_notice", None)
+        if resource_notice:
+            st.success(resource_notice)
+        st.subheader("Resource library")
         resources = repo.resources(include_unpublished=True)
-        st.dataframe(pd.DataFrame(resources), hide_index=True, width="stretch")
+        resource_table = pd.DataFrame(resources)
+        visible_resource_columns = [column for column in [
+            "section", "title", "resource_type", "delivery_type", "content_format", "status", "sort_order",
+        ] if column in resource_table.columns]
+        st.dataframe(resource_table[visible_resource_columns], hide_index=True, width="stretch")
         if resources:
-            resource_labels = {f"{item.get('title')} · {item.get('status')}": item for item in resources}
+            resource_labels = {
+                f"{item.get('title')} · {item.get('status')} · {item.get('id')}": item
+                for item in resources
+            }
             with st.form("resource_status_form"):
                 resource_label = st.selectbox("Existing resource", resource_labels)
                 resource_status = st.selectbox("Update lifecycle", ["draft", "published", "archived"])
@@ -1194,38 +1229,147 @@ def admin_page(repo, user: PortalUser) -> None:
                     st.success("Resource lifecycle updated.")
                 except Exception as exc:
                     st.error(f"Could not update the resource: {exc}")
-        with st.form("resource_form", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                section = st.text_input("Section", value="Featured research")
-                title = st.text_input("Title")
-                resource_type = st.selectbox("Resource type", ["Research report", "Methodology", "Data definition", "Tool", "News"])
-            with c2:
-                external_url = st.text_input("External URL", placeholder="https://")
-                status = st.selectbox("Status", ["draft", "published", "archived"])
-                sort_order = st.number_input("Sort order", min_value=0, value=10, step=10)
-            summary = st.text_area("Summary")
-            content = st.text_area(
-                "In-portal content (optional)",
-                help="Add guidance here when the resource should open inside the portal instead of linking to another website.",
-            )
-            save_resource = st.form_submit_button("Save resource", type="primary")
-        if save_resource:
-            if not title.strip() or not summary.strip():
-                st.error("Title and summary are required.")
-            elif status == "published" and not external_url.strip() and not content.strip():
-                st.error("A published resource needs either an external URL or in-portal content.")
-            else:
-                try:
-                    repo.save_resource({
-                        "section": section.strip(), "title": title.strip(), "summary": summary.strip(),
-                        "resource_type": resource_type, "external_url": external_url.strip() or None,
-                        "content": content.strip(),
-                        "status": status, "sort_order": int(sort_order),
-                    })
-                    st.success("Resource saved.")
-                except Exception as exc:
-                    st.error(f"Could not save the resource: {exc}")
+
+        st.subheader("Add a resource")
+        st.caption("Choose whether members will read the resource inside the portal or open a trusted external website.")
+        article_tab, external_tab = st.tabs(["In-portal article", "External link"])
+
+        with article_tab:
+            with st.form("internal_resource_form"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    article_section = st.text_input("Section", value="Member guidance", key="article_section")
+                    article_title = st.text_input("Title", key="article_title")
+                    article_type = st.selectbox(
+                        "Resource type",
+                        ["Research report", "Methodology", "Data definition", "Tool", "News"],
+                        key="article_type",
+                    )
+                with c2:
+                    article_format_label = st.selectbox(
+                        "Content format", ["Markdown", "HTML"], key="article_format"
+                    )
+                    article_status = st.selectbox(
+                        "Status", ["draft", "published", "archived"], key="article_status"
+                    )
+                    article_sort_order = st.number_input(
+                        "Sort order", min_value=0, value=10, step=10, key="article_sort_order"
+                    )
+                article_summary = st.text_area("Summary", key="article_summary")
+                article_content = st.text_area(
+                    "Article content",
+                    height=320,
+                    key="article_content",
+                    help=(
+                        "Markdown is easiest for headings, lists and links. HTML supports a safe subset of text, "
+                        "table and link tags; scripts, forms, iframes, styles and unsafe URLs are removed."
+                    ),
+                )
+                preview_article = st.form_submit_button("Preview article")
+                save_article = st.form_submit_button("Save in-portal article", type="primary")
+
+            article_format = article_format_label.lower()
+            if preview_article:
+                st.markdown("#### Article preview")
+                if article_content.strip():
+                    render_resource_content(article_content, article_format)
+                else:
+                    st.info("Add article content to preview it.")
+            if save_article:
+                if not article_section.strip() or not article_title.strip() or not article_summary.strip():
+                    st.error("Section, title and summary are required.")
+                elif article_status == "published" and not article_content.strip():
+                    st.error("A published in-portal article needs content.")
+                else:
+                    stored_content = article_content.strip()
+                    if article_format == FORMAT_HTML:
+                        stored_content = sanitize_resource_html(stored_content)
+                    if article_status == "published" and not stored_content:
+                        st.error("The HTML contains no safe displayable content.")
+                    else:
+                        try:
+                            repo.save_resource({
+                                "section": article_section.strip(),
+                                "title": article_title.strip(),
+                                "summary": article_summary.strip(),
+                                "resource_type": article_type,
+                                "delivery_type": "internal",
+                                "content_format": article_format,
+                                "external_url": None,
+                                "content": stored_content,
+                                "status": article_status,
+                                "sort_order": int(article_sort_order),
+                                "published_at": date.today().isoformat() if article_status == "published" else None,
+                                "created_by": user.id,
+                            })
+                            st.session_state.admin_resource_notice = "In-portal article saved."
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Could not save the article: {exc}")
+
+        with external_tab:
+            with st.form("external_resource_form"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    link_section = st.text_input("Section", value="Featured research", key="link_section")
+                    link_title = st.text_input("Title", key="link_title")
+                    link_type = st.selectbox(
+                        "Resource type",
+                        ["Research report", "Methodology", "Data definition", "Tool", "News"],
+                        key="link_type",
+                    )
+                with c2:
+                    link_url = st.text_input(
+                        "External HTTPS URL", placeholder="https://", key="link_url"
+                    )
+                    link_status = st.selectbox(
+                        "Status", ["draft", "published", "archived"], key="link_status"
+                    )
+                    link_sort_order = st.number_input(
+                        "Sort order", min_value=0, value=10, step=10, key="link_sort_order"
+                    )
+                link_summary = st.text_area("Summary", key="link_summary")
+                test_link = st.form_submit_button("Test link")
+                save_link = st.form_submit_button("Save external link", type="primary")
+
+            checked_link = None
+            if test_link or save_link:
+                if link_url.strip():
+                    try:
+                        checked_link = validate_external_url(link_url)
+                    except ValueError as exc:
+                        st.error(str(exc))
+                elif test_link or link_status == "published":
+                    st.error("Enter the external resource URL.")
+            if test_link and checked_link:
+                st.link_button("Open link in a new tab", checked_link)
+            if save_link:
+                if not link_section.strip() or not link_title.strip() or not link_summary.strip():
+                    st.error("Section, title and summary are required.")
+                elif link_status == "published" and not checked_link:
+                    st.error("A published external resource needs a valid HTTPS URL.")
+                elif link_url.strip() and not checked_link:
+                    pass
+                else:
+                    try:
+                        repo.save_resource({
+                            "section": link_section.strip(),
+                            "title": link_title.strip(),
+                            "summary": link_summary.strip(),
+                            "resource_type": link_type,
+                            "delivery_type": "external",
+                            "content_format": "markdown",
+                            "external_url": checked_link,
+                            "content": "",
+                            "status": link_status,
+                            "sort_order": int(link_sort_order),
+                            "published_at": date.today().isoformat() if link_status == "published" else None,
+                            "created_by": user.id,
+                        })
+                        st.session_state.admin_resource_notice = "External resource link saved."
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not save the external link: {exc}")
 
 
 user = st.session_state.get("portal_user")
