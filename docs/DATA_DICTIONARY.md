@@ -69,3 +69,7 @@ Demographic observations come from the 2021 Census Profile SDMX API. Geography i
 | `retrieved_at` | UTC timestamp of the API synchronization |
 
 The first metric catalogue covers population and growth, density, households, broad age groups, total and after-tax household income, and labour-force rates. Income observations refer to 2020; after-tax income is spending-capacity context and must not be described as current spending. FSA data represents census forward sortation areas derived from reported postal codes, not exact delivery boundaries.
+
+## Linked market scenario
+
+Scenario exports identify every row as `Statistics Canada 2021`, `AIA 2015`, `User assumption`, or `Calculated scenario`. Estimated vehicles, annual auto care pool, pool per serving shop and target-share revenue are calculated planning lenses; they are not stored source observations and must not be described as forecasts.

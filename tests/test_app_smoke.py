@@ -26,3 +26,18 @@ def test_demo_admin_centre_renders_without_exceptions():
     next(button for button in app.button if button.label == "View as admin").click().run()
     portal_radio(app).set_value("Admin Centre").run()
     assert not app.exception
+
+
+def test_market_demographics_links_to_benchmark_explorer():
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    next(button for button in app.button if button.label == "View as member").click().run()
+    portal_radio(app).set_value("Market Demographics").run()
+
+    next(
+        button for button in app.button
+        if button.label == "Open this region in Benchmark Explorer"
+    ).click().run()
+
+    assert portal_radio(app).value == "Benchmark Explorer"
+    assert not app.exception
+    assert any("Linked from Ontario" in item.value for item in app.info)

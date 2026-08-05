@@ -29,6 +29,7 @@ from aia_portal.data import (  # noqa: E402
     read_template_bytes,
 )
 from aia_portal.exports import csv_bytes, excel_report_bytes, pdf_report_bytes  # noqa: E402
+from aia_portal.market import calculate_market_scenario  # noqa: E402
 from aia_portal.repository import DemoRepository, SupabaseRepository  # noqa: E402
 from aia_portal.ui import inject_theme, metric_card, page_intro, source_note  # noqa: E402
 from aia_portal.validation import read_uploaded_table, validate_shop_upload  # noqa: E402
@@ -106,6 +107,9 @@ def clear_user() -> None:
     st.session_state.pop("portal_user", None)
     st.session_state.pop("session_tokens", None)
     st.session_state.pop("repo", None)
+    st.session_state.pop("portal_page", None)
+    st.session_state.pop("next_portal_page", None)
+    st.session_state.pop("market_bridge_context", None)
 
 
 def login_page() -> None:
@@ -190,7 +194,12 @@ def portal_sidebar(user: PortalUser) -> str:
         ]
         if user.is_admin:
             pages.append("Admin Centre")
-        current = st.radio("Portal", pages, label_visibility="collapsed")
+        next_page = st.session_state.pop("next_portal_page", None)
+        if next_page in pages:
+            st.session_state["portal_page"] = next_page
+        if st.session_state.get("portal_page") not in pages:
+            st.session_state["portal_page"] = "Overview"
+        current = st.radio("Portal", pages, label_visibility="collapsed", key="portal_page")
         st.divider()
         st.markdown(f"**{escape(user.full_name)}**", unsafe_allow_html=True)
         st.caption(user.organization or user.email)
@@ -294,6 +303,7 @@ def explorer_page(repo) -> None:
         "Filter dimensions, change the visual and export the result with source context preserved.",
     )
     data = repo.segment_benchmarks()
+    bridge = st.session_state.get("market_bridge_context") or {}
     f1, f2, f3, f4 = st.columns([1, 1, 1.25, 1.4])
     with f1:
         segment = st.selectbox("Segment", sorted(data["segment"].dropna().unique()))
@@ -306,10 +316,15 @@ def explorer_page(repo) -> None:
         )
     filtered = filtered[filtered["shop_size"].isin(sizes)]
     with f3:
+        scope_options = ["Regional comparison", "National / affiliation"]
+        linked_scope = bridge.get("scope")
+        scope_index = scope_options.index(linked_scope) if linked_scope in scope_options else (
+            0 if (filtered["geography_type"] == "region").any() else 1
+        )
         scope = st.selectbox(
             "View",
-            ["Regional comparison", "National / affiliation"],
-            index=0 if (filtered["geography_type"] == "region").any() else 1,
+            scope_options,
+            index=scope_index,
         )
     filtered = filtered[
         filtered["geography_type"] == ("region" if scope == "Regional comparison" else "national")
@@ -322,6 +337,27 @@ def explorer_page(repo) -> None:
             format_func=lambda code: METRICS[code][0],
             index=available_metrics.index("hours_sold_technician_day")
             if "hours_sold_technician_day" in available_metrics else 0,
+        )
+
+    if scope == "Regional comparison":
+        region_options = sorted(filtered["geography"].dropna().unique())
+        linked_region = bridge.get("region")
+        default_regions = [linked_region] if linked_region in region_options else region_options
+        selected_regions = st.multiselect(
+            "AIA benchmark regions",
+            region_options,
+            default=default_regions,
+        )
+        filtered = filtered[filtered["geography"].isin(selected_regions)]
+        if linked_region in region_options:
+            st.info(
+                f"Linked from {bridge.get('geography', 'Market Demographics')} to the "
+                f"historical AIA benchmark region: {linked_region}."
+            )
+    elif bridge.get("scope") == "National / affiliation":
+        st.info(
+            f"Linked from {bridge.get('geography', 'Market Demographics')} to the historical "
+            "national AIA benchmark because the 2015 report has no separate territory benchmark."
         )
 
     visual = st.radio("Visualization", ["Bar", "Bubble", "Heatmap", "Table"], horizontal=True)
@@ -492,6 +528,13 @@ def _demographic_display(item: dict | None) -> str:
     return f"{value:,.0f}"
 
 
+def _demographic_value(metrics: dict[str, dict], code: str) -> float | None:
+    item = metrics.get(code)
+    if not item or item.get("value") is None:
+        return None
+    return float(item["value"])
+
+
 def demographics_page(repo, user: PortalUser) -> None:
     page_intro(
         "Canadian market context",
@@ -509,22 +552,41 @@ def demographics_page(repo, user: PortalUser) -> None:
     )
     geo_level = DEMOGRAPHIC_LEVELS[level_label]
     province_code = None
-    if geo_level != "province":
+    search_query = None
+    if geo_level == "province":
+        geographies = repo.demographic_geographies(geo_level, limit=25)
+    else:
         province_code = st.selectbox(
             "Province or territory",
             list(PROVINCE_NAMES),
             format_func=lambda code: PROVINCE_NAMES[code],
         )
-
-    geographies = repo.demographic_geographies(geo_level, province_code)
+        search_label = "Search municipality" if geo_level == "municipality" else "Search postal region"
+        search_query = st.text_input(
+            search_label,
+            placeholder="Start typing Ottawa, Montréal or K1A",
+            help="Enter at least two characters. Results are filtered in the database and limited to 100 matches.",
+            key=f"demographic_search_{geo_level}",
+        ).strip()
+        if len(search_query) < 2:
+            st.info("Enter at least two characters to search. This replaces the previous long dropdown list.")
+            return
+        geographies = repo.demographic_geographies(
+            geo_level,
+            province_code,
+            search_query=search_query,
+            limit=100,
+        )
     if not geographies:
         st.info(
-            "The demographic database is ready, but this geographic level has not been synchronized yet. "
-            "An AIA Canada administrator can run the trusted Statistics Canada sync from Codespaces."
+            "No matching geography was found. Check the province and spelling, or try a shorter search."
         )
-        if user.is_admin:
+        if user.is_admin and search_query is None:
             st.code("python scripts/sync_statcan_demographics.py", language="bash")
         return
+
+    if len(geographies) == 100:
+        st.caption("Showing the first 100 matches. Add more letters to narrow the results.")
 
     labels = {
         f"{item.get('geo_name')} · {item.get('geo_code')}": item
@@ -633,7 +695,7 @@ def demographics_page(repo, user: PortalUser) -> None:
         )
         chart(fig)
 
-    st.subheader("AIA auto care benchmark alignment")
+    st.subheader("Linked auto care market view")
     aia_region = AIA_REGION_BY_PROVINCE.get(selected["province_code"], "Canada")
     benchmark = repo.segment_benchmarks()
     geography_type = "national" if aia_region == "Canada" else "region"
@@ -643,13 +705,138 @@ def demographics_page(repo, user: PortalUser) -> None:
         & (benchmark["segment"] == "Mechanical")
         & (benchmark["affiliation"] == "All")
     ]
+    st.caption(
+        f"{selected['geo_name']} maps to the {aia_region} AIA benchmark region through "
+        f"{PROVINCE_NAMES[selected['province_code']]}. Municipality and FSA selections inherit the "
+        "provincial region; the AIA values are not local estimates."
+    )
+    linked_benchmark = None
     if not scoped.empty:
-        low = scoped["hours_sold_technician_day"].min()
-        high = scoped["hours_sold_technician_day"].max()
-        metric_card(
-            f"2015 AIA benchmark region · {aia_region}",
-            f"{low:.1f}–{high:.1f} hours",
-            "Hours sold per technician per day across shop-size cohorts; historical context only.",
+        shop_sizes = list(dict.fromkeys(scoped["shop_size"].dropna()))
+        shop_size = st.selectbox("Historical AIA shop-size cohort", shop_sizes)
+        linked_benchmark = scoped[scoped["shop_size"] == shop_size].iloc[0]
+        benchmark_cards = st.columns(5)
+        benchmark_values = [
+            ("Repair orders / year", f"{linked_benchmark['average_repair_orders_year']:,.0f}"),
+            ("Hours / repair order", f"{linked_benchmark['average_hours_repair_order']:.1f}"),
+            ("Hours sold / tech / day", f"{linked_benchmark['hours_sold_technician_day']:.1f}"),
+            ("Service advisor", f"{linked_benchmark['percentage_with_service_advisor']:.0f}%"),
+            ("Regional sample", f"{linked_benchmark['sample_size']:,.0f}"),
+        ]
+        for column, (label, value) in zip(benchmark_cards, benchmark_values):
+            with column:
+                metric_card(label, value, f"{aia_region} · {shop_size} · 2015")
+        st.caption(
+            "Direct AIA linkage: observed historical regional benchmark values from the 2015 survey. "
+            "They provide comparison context, not a current local-market forecast."
+        )
+        if st.button("Open this region in Benchmark Explorer", type="primary"):
+            st.session_state["market_bridge_context"] = {
+                "region": aia_region,
+                "geography": selected["geo_name"],
+                "province_code": selected["province_code"],
+                "scope": "National / affiliation" if aia_region == "Canada" else "Regional comparison",
+            }
+            st.session_state["next_portal_page"] = "Benchmark Explorer"
+            st.rerun()
+
+    occupied_households = _demographic_value(metrics, "occupied_private_dwellings")
+    population_growth = _demographic_value(metrics, "population_growth_2016_2021")
+    age_65_plus = _demographic_value(metrics, "age_65_plus")
+    population = _demographic_value(metrics, "population_2021")
+    if occupied_households is not None:
+        st.subheader("Auto care demand scenario")
+        st.warning(
+            "Directional scenario only—not a forecast. Occupied households come from the 2021 Census; "
+            "vehicle ownership, annual spending, shop count and target share are user-controlled assumptions."
+        )
+        with st.container(border=True):
+            a1, a2, a3, a4 = st.columns(4)
+            with a1:
+                vehicles_per_household = st.number_input(
+                    "Vehicles / household (assumption)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=1.5,
+                    step=0.1,
+                )
+            with a2:
+                annual_spend_per_vehicle = st.number_input(
+                    "Annual auto care / vehicle (assumption)",
+                    min_value=0.0,
+                    value=1200.0,
+                    step=100.0,
+                    format="%.0f",
+                )
+            with a3:
+                shops_serving_market = st.number_input(
+                    "Shops serving market (assumption)",
+                    min_value=1,
+                    value=25,
+                    step=1,
+                )
+            with a4:
+                target_share_percent = st.number_input(
+                    "Target market share (assumption)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=2.0,
+                    step=0.5,
+                )
+
+        scenario = calculate_market_scenario(
+            occupied_households=occupied_households,
+            vehicles_per_household=vehicles_per_household,
+            annual_spend_per_vehicle=annual_spend_per_vehicle,
+            shops_serving_market=int(shops_serving_market),
+            target_share_percent=target_share_percent,
+        )
+        scenario_cards = st.columns(4)
+        scenario_values = [
+            ("Estimated vehicle base", f"{scenario.estimated_vehicles:,.0f}", "Households × vehicles assumption"),
+            ("Annual auto care pool", f"${scenario.annual_auto_care_pool:,.0f}", "Vehicles × spending assumption"),
+            ("Pool / serving shop", f"${scenario.annual_pool_per_shop:,.0f}", "Scenario pool ÷ assumed shops"),
+            ("Revenue at target share", f"${scenario.target_share_revenue:,.0f}", "Scenario pool × target share"),
+        ]
+        for column, values in zip(scenario_cards, scenario_values):
+            with column:
+                metric_card(*values)
+
+        signals = [f"The scenario starts with {occupied_households:,.0f} occupied households (2021)."]
+        if population_growth is not None:
+            signals.append(
+                f"Population changed {population_growth:+.1f}% from 2016 to 2021; use this as historical "
+                "growth context, not a current projection."
+            )
+        if age_65_plus is not None and population:
+            signals.append(
+                f"Residents aged 65+ represented {age_65_plus / population * 100:.1f}% of the 2021 population; "
+                "this is planning context, not a vehicle-ownership proxy."
+            )
+        st.markdown("#### Planning signals\n\n" + "\n".join(f"- {signal}" for signal in signals))
+
+        export_rows = [
+            {"basis": "Statistics Canada 2021", "measure": "Occupied households", "value": occupied_households},
+            {"basis": "User assumption", "measure": "Vehicles per household", "value": vehicles_per_household},
+            {"basis": "User assumption", "measure": "Annual auto care per vehicle (CAD)", "value": annual_spend_per_vehicle},
+            {"basis": "User assumption", "measure": "Shops serving market", "value": shops_serving_market},
+            {"basis": "User assumption", "measure": "Target market share (%)", "value": target_share_percent},
+            {"basis": "Calculated scenario", "measure": "Estimated vehicle base", "value": scenario.estimated_vehicles},
+            {"basis": "Calculated scenario", "measure": "Annual auto care pool (CAD)", "value": scenario.annual_auto_care_pool},
+            {"basis": "Calculated scenario", "measure": "Pool per serving shop (CAD)", "value": scenario.annual_pool_per_shop},
+            {"basis": "Calculated scenario", "measure": "Revenue at target share (CAD)", "value": scenario.target_share_revenue},
+        ]
+        if linked_benchmark is not None:
+            export_rows.extend([
+                {"basis": f"AIA 2015 · {aia_region}", "measure": "Repair orders per year", "value": linked_benchmark["average_repair_orders_year"]},
+                {"basis": f"AIA 2015 · {aia_region}", "measure": "Hours per repair order", "value": linked_benchmark["average_hours_repair_order"]},
+                {"basis": f"AIA 2015 · {aia_region}", "measure": "Hours sold per technician per day", "value": linked_benchmark["hours_sold_technician_day"]},
+            ])
+        st.download_button(
+            "Download linked market scenario",
+            csv_bytes(pd.DataFrame(export_rows)),
+            file_name=f"aia_linked_market_scenario_{selected['geo_code']}.csv",
+            mime="text/csv",
         )
 
     detail = pd.DataFrame(observations)[

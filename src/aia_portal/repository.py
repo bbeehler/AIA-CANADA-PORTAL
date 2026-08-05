@@ -45,6 +45,28 @@ DEFAULT_RESOURCES = [
     },
 ]
 
+DEMO_DEMOGRAPHIC_VALUES = [
+    ("population_2021", "Population, 2021", "Population", "count", "2021", 14_223_942),
+    ("population_2016", "Population, 2016", "Population", "count", "2016", 13_448_494),
+    ("population_growth_2016_2021", "Population growth, 2016 to 2021", "Population", "percent", "2016-2021", 5.8),
+    ("population_density", "Population density", "Population", "people_per_square_km", "2021", 15.9),
+    ("total_private_dwellings", "Total private dwellings", "Households", "count", "2021", 5_929_250),
+    ("occupied_private_dwellings", "Occupied private dwellings", "Households", "count", "2021", 5_491_201),
+    ("average_household_size", "Average household size", "Households", "count", "2021", 2.6),
+    ("one_person_households", "One-person households", "Households", "count", "2021", 1_452_540),
+    ("age_0_14", "Population aged 0 to 14", "Age", "count", "2021", 2_251_795),
+    ("age_15_64", "Population aged 15 to 64", "Age", "count", "2021", 9_334_440),
+    ("age_65_plus", "Population aged 65 and over", "Age", "count", "2021", 2_637_710),
+    ("median_age", "Median age", "Age", "years", "2021", 41.6),
+    ("median_household_income", "Median household income, 2020", "Income", "cad", "2020", 91_000),
+    ("average_household_income", "Average household income, 2020", "Income", "cad", "2020", 116_000),
+    ("median_after_tax_household_income", "Median after-tax household income, 2020", "Income", "cad", "2020", 79_500),
+    ("average_after_tax_household_income", "Average after-tax household income, 2020", "Income", "cad", "2020", 95_300),
+    ("participation_rate", "Labour-force participation rate", "Workforce", "percent", "2021", 62.8),
+    ("employment_rate", "Employment rate", "Workforce", "percent", "2021", 55.1),
+    ("unemployment_rate", "Unemployment rate", "Workforce", "percent", "2021", 12.2),
+]
+
 
 class DemoRepository:
     def __init__(self, state: MutableMapping[str, Any]):
@@ -97,11 +119,44 @@ class DemoRepository:
         self,
         geo_level: str,
         province_code: str | None = None,
+        search_query: str | None = None,
+        limit: int = 100,
     ) -> list[dict[str, Any]]:
-        return []
+        if geo_level != "province" or (province_code and province_code != "ON"):
+            return []
+        if search_query and search_query.casefold() not in "ontario":
+            return []
+        return [{
+            "geo_uid": "2021A000235",
+            "geo_level": "province",
+            "geo_code": "35",
+            "geo_name": "Ontario",
+            "province_code": "ON",
+            "census_year": 2021,
+            "source_flow": "DF_PR",
+        }][:limit]
 
     def demographic_observations(self, geography_id: str) -> list[dict[str, Any]]:
-        return []
+        if geography_id != "2021A000235":
+            return []
+        return [
+            {
+                "metric_code": code,
+                "label": label,
+                "category": category,
+                "unit": unit,
+                "reference_period": period,
+                "value": value,
+                "source_characteristic_id": f"demo-{code}",
+                "source_characteristic_name": label,
+                "source_flow": "DF_PR",
+                "source_url": "https://www12.statcan.gc.ca/wds-sdw/2021profile-profil2021-eng.cfm",
+                "retrieved_at": "2026-08-05T19:06:20+00:00",
+                "sort_order": index * 10,
+            }
+            for index, (code, label, category, unit, period, value)
+            in enumerate(DEMO_DEMOGRAPHIC_VALUES, start=1)
+        ]
 
     def demographic_sync_runs(self) -> list[dict[str, Any]]:
         return []
@@ -279,25 +334,20 @@ class SupabaseRepository:
         self,
         geo_level: str,
         province_code: str | None = None,
+        search_query: str | None = None,
+        limit: int = 100,
     ) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        page_size = 1000
-        offset = 0
-        while True:
-            query = (
-                self.client.table("demographic_geographies")
-                .select("*")
-                .eq("geo_level", geo_level)
-                .order("geo_name")
-            )
-            if province_code:
-                query = query.eq("province_code", province_code)
-            page = list(query.range(offset, offset + page_size - 1).execute().data or [])
-            rows.extend(page)
-            if len(page) < page_size:
-                break
-            offset += page_size
-        return rows
+        query = (
+            self.client.table("demographic_geographies")
+            .select("*")
+            .eq("geo_level", geo_level)
+        )
+        if province_code:
+            query = query.eq("province_code", province_code)
+        if search_query and search_query.strip():
+            query = query.ilike("geo_name", f"%{search_query.strip()}%")
+        response = query.order("geo_name").limit(max(1, min(limit, 100))).execute()
+        return list(response.data or [])
 
     def demographic_observations(self, geography_id: str) -> list[dict[str, Any]]:
         response = (

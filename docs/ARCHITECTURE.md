@@ -26,6 +26,9 @@ flowchart TD
 - Dataset “removal” defaults to archive. This preserves provenance and supports auditability.
 - Statistics Canada data is synchronized by a trusted operator using a temporary server-side secret-key environment variable. Streamlit reads cached Supabase snapshots and never receives that key.
 - Municipalities use census subdivisions and postal analysis uses three-character FSAs. Full postal codes are prohibited from member uploads.
+- Municipality and FSA lookup is filtered in Supabase and capped at 100 results per search; the browser does not receive the full national geography list.
+- The market bridge maps a selected geography's province to the closest geography published in the 2015 AIA benchmark. Municipal and FSA selections inherit that regional context and are never presented as local AIA observations.
+- Market-scenario outputs remain client-side calculations. Census household counts and AIA benchmark values retain source labels; vehicle ownership, annual spending, shop count and target share are visibly marked as user assumptions.
 
 ## Roles
 

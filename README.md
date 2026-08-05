@@ -17,6 +17,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 - Supabase schema with explicit Data API grants, RLS policies and private Storage policies
 - Page-level provenance for all values transcribed from the 2015 AIA Canada report
 - Statistics Canada Census Profile integration for provinces, municipalities and three-character postal regions
+- Database-filtered municipality/FSA search, linked AIA regional benchmarks and an explicit market-assumption scenario
 - Demo member/admin workspaces for stakeholder review
 
 ## Local demo
@@ -111,6 +112,7 @@ Administrators can edit a member's email, profile, role and membership status fr
 | `data/` | Source-transcribed benchmarks and member template |
 | `docs/ARCHITECTURE.md` | Trust boundaries, roles and hardening backlog |
 | `docs/DATA_DICTIONARY.md` | Benchmark and contribution field definitions |
+| `docs/MARKET_LINKAGE.md` | Rules separating direct demographic/benchmark links from scenario assumptions |
 | `.github/workflows/ci.yml` | Lint, test and compile checks |
 
 ## Data governance notes

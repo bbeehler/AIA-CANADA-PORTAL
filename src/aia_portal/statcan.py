@@ -29,6 +29,7 @@ class MetricSpec:
     code: str
     source_names: tuple[str, ...]
     reference_period: str
+    source_codes: tuple[str, ...] = ()
 
 
 METRIC_SPECS = (
@@ -48,9 +49,9 @@ METRIC_SPECS = (
     ),
     MetricSpec("average_household_size", ("Average household size",), "2021"),
     MetricSpec("one_person_households", ("One-person households",), "2021"),
-    MetricSpec("age_0_14", ("0 to 14 years",), "2021"),
-    MetricSpec("age_15_64", ("15 to 64 years",), "2021"),
-    MetricSpec("age_65_plus", ("65 years and over",), "2021"),
+    MetricSpec("age_0_14", ("0 to 14 years",), "2021", ("9",)),
+    MetricSpec("age_15_64", ("15 to 64 years",), "2021", ("13",)),
+    MetricSpec("age_65_plus", ("65 years and over",), "2021", ("24",)),
     MetricSpec("median_age", ("Median age of the population", "Median age"), "2021"),
     MetricSpec(
         "median_household_income",
@@ -173,15 +174,23 @@ def match_metrics(characteristics: Iterable[dict[str, Any]]) -> dict[str, dict[s
     matched: dict[str, dict[str, str]] = {}
     for spec in METRIC_SPECS:
         source_names = {_normalized(name) for name in spec.source_names}
-        exact = next(
-            (item for item in candidates if _normalized(item["characteristic_name"]) in source_names),
-            None,
-        )
+        exact = None
+        if spec.source_codes:
+            exact = next(
+                (item for item in candidates if item["characteristic_code"] in spec.source_codes),
+                None,
+            )
+        if exact is None and not spec.source_codes:
+            exact = next(
+                (item for item in candidates if _normalized(item["characteristic_name"]) in source_names),
+                None,
+            )
         if exact is None:
             exact = next(
                 (
                     item for item in candidates
-                    if any(name in _normalized(item["characteristic_name"]) for name in source_names)
+                    if not spec.source_codes
+                    and any(name in _normalized(item["characteristic_name"]) for name in source_names)
                 ),
                 None,
             )

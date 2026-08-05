@@ -41,6 +41,36 @@ def test_supported_metric_names_are_matched():
     assert metrics["population_2016"]["reference_period"] == "2016"
 
 
+def test_duplicate_age_labels_use_official_count_characteristics():
+    characteristics = [
+        {
+            "characteristic_code": "35",
+            "characteristic_name": "0 to 14 years",
+            "value": 15.8,
+        },
+        {
+            "characteristic_code": "9",
+            "characteristic_name": "0 to 14 years",
+            "value": 2_251_795,
+        },
+        {
+            "characteristic_code": "37",
+            "characteristic_name": "65 years and over",
+            "value": 18.5,
+        },
+        {
+            "characteristic_code": "24",
+            "characteristic_name": "65 years and over",
+            "value": 2_637_710,
+        },
+    ]
+
+    metrics = match_metrics(characteristics)
+
+    assert metrics["age_0_14"]["characteristic_code"] == "9"
+    assert metrics["age_65_plus"]["characteristic_code"] == "24"
+
+
 def test_geography_province_codes_cover_municipality_and_fsa():
     assert province_for_geography("DF_PR", "2021A000235") == "ON"
     assert province_for_geography("DF_PR", "2021A000011124") == ""
