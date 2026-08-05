@@ -58,3 +58,27 @@ def test_full_postal_code_is_rejected_in_fsa_field():
     result = validate_shop_upload(frame)
     assert not result.valid
     assert any("first three" in error for error in result.errors)
+
+
+def test_unexpected_columns_are_rejected():
+    frame = valid_frame()
+    frame["internal_notes"] = "not part of the contribution contract"
+    result = validate_shop_upload(frame)
+    assert not result.valid
+    assert any("Unexpected columns" in error for error in result.errors)
+
+
+def test_formula_like_municipality_is_rejected():
+    frame = valid_frame()
+    frame["municipality"] = '=HYPERLINK("https://example.ca")'
+    result = validate_shop_upload(frame)
+    assert not result.valid
+    assert any("formula-like" in error for error in result.errors)
+
+
+def test_future_reporting_month_is_rejected():
+    frame = valid_frame()
+    frame["reporting_month"] = "2200-01"
+    result = validate_shop_upload(frame)
+    assert not result.valid
+    assert any("future" in error for error in result.errors)

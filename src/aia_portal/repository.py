@@ -10,6 +10,7 @@ import pandas as pd
 from .auth import PortalUser
 from .data import load_performance_benchmarks, load_segment_benchmarks
 from .dataset_validation import read_dataset_csv, validate_dataset, validate_dataset_slug
+from .validation import read_uploaded_table, validate_shop_upload
 
 
 DEFAULT_RESOURCES = [
@@ -178,6 +179,14 @@ class DemoRepository:
         row_count: int,
         notes: str,
     ) -> dict[str, Any]:
+        frame = read_uploaded_table(payload, filename)
+        validation = validate_shop_upload(frame)
+        if not validation.valid:
+            raise ValueError("Contribution validation failed: " + " ".join(validation.errors))
+        if row_count != len(validation.data):
+            raise ValueError("Contribution row count does not match the validated data.")
+        normalized_payload = validation.data.to_csv(index=False).encode("utf-8")
+        safe_name = f"{Path(filename).stem}.csv"
         record = {
             "id": str(uuid4()),
             "contributor_id": user.id,
@@ -185,16 +194,16 @@ class DemoRepository:
             "organization": organization,
             "reporting_period_start": str(period_start),
             "reporting_period_end": str(period_end),
-            "original_filename": Path(filename).name,
-            "storage_path": f"demo/{Path(filename).name}",
-            "row_count": row_count,
+            "original_filename": safe_name,
+            "storage_path": f"demo/{safe_name}",
+            "row_count": len(validation.data),
             "notes": notes,
             "status": "submitted",
             "admin_notes": "",
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
         self.state["demo_contributions"].append(record)
-        self.state["demo_contribution_payloads"][record["id"]] = payload
+        self.state["demo_contribution_payloads"][record["id"]] = normalized_payload
         return record
 
     def contributions(self, user: PortalUser, include_all: bool = False) -> list[dict[str, Any]]:
@@ -402,16 +411,20 @@ class SupabaseRepository:
         row_count: int,
         notes: str,
     ) -> dict[str, Any]:
+        frame = read_uploaded_table(payload, filename)
+        validation = validate_shop_upload(frame)
+        if not validation.valid:
+            raise ValueError("Contribution validation failed: " + " ".join(validation.errors))
+        if row_count != len(validation.data):
+            raise ValueError("Contribution row count does not match the validated data.")
+        normalized_payload = validation.data.to_csv(index=False).encode("utf-8")
         submission_id = str(uuid4())
-        safe_name = Path(filename).name.replace(" ", "_")
+        safe_name = f"{Path(filename).stem.replace(' ', '_')}.csv"
         storage_path = f"{user.id}/{submission_id}/{safe_name}"
-        mime = "text/csv" if safe_name.lower().endswith(".csv") else (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
         self.client.storage.from_("member-contributions").upload(
             path=storage_path,
-            file=payload,
-            file_options={"content-type": mime, "upsert": "false"},
+            file=normalized_payload,
+            file_options={"content-type": "text/csv", "upsert": "false"},
         )
         try:
             response = self.client.table("contributions").insert({
@@ -422,7 +435,7 @@ class SupabaseRepository:
                 "reporting_period_end": str(period_end),
                 "original_filename": safe_name,
                 "storage_path": storage_path,
-                "row_count": row_count,
+                "row_count": len(validation.data),
                 "notes": notes,
                 "status": "submitted",
             }).execute()

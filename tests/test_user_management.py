@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from aia_portal.auth import DEMO_USERS
 from aia_portal.repository import DemoRepository, SupabaseRepository
 
@@ -34,7 +36,11 @@ def test_demo_repository_permanently_deletes_user_contributions_and_file():
         period_start=date(2026, 1, 1),
         period_end=date(2026, 1, 31),
         filename="shop.csv",
-        payload=b"month,labour_sales\n2026-01,1000\n",
+        payload=(
+            b"reporting_month,province,shop_type,bay_count,technician_count,repair_orders,"
+            b"hours_sold,labour_sales_cad,parts_sales_cad,tire_sales_cad\n"
+            b"2026-01,ON,Mechanical,5,4,220,420,52500,76000,0\n"
+        ),
         row_count=1,
         notes="",
     )
@@ -44,6 +50,22 @@ def test_demo_repository_permanently_deletes_user_contributions_and_file():
     assert all(profile["id"] != "demo-member" for profile in repo.profiles())
     assert not repo.state["demo_contributions"]
     assert contribution["id"] not in repo.state["demo_contribution_payloads"]
+
+
+def test_demo_repository_revalidates_contribution_payloads():
+    repo = DemoRepository({})
+
+    with pytest.raises(ValueError, match="Contribution validation failed"):
+        repo.submit_contribution(
+            user=DEMO_USERS["member"],
+            organization="Maple Auto Service",
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            filename="invalid.csv",
+            payload=b"customer_email,labour_sales_cad\nperson@example.ca,1000\n",
+            row_count=1,
+            notes="",
+        )
 
 
 def test_demo_repository_protects_last_active_admin():
@@ -93,4 +115,3 @@ def test_supabase_repository_invokes_server_side_user_admin_function():
         "action": "delete",
         "user_id": "11111111-1111-4111-8111-111111111111",
     }
-

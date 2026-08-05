@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 
@@ -19,6 +20,7 @@ REQUIRED_COLUMNS = [
     "parts_sales_cad",
     "tire_sales_cad",
 ]
+OPTIONAL_COLUMNS = ["municipality", "forward_sortation_area"]
 
 PROVINCES = {"AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"}
 SHOP_TYPES = {"Mechanical", "Tire", "Collision", "Other"}
@@ -82,28 +84,70 @@ def validate_shop_upload(frame: pd.DataFrame) -> ValidationResult:
             "Remove customer or employee identifiers before uploading: " + ", ".join(pii_columns)
         )
 
+    allowed_columns = set(REQUIRED_COLUMNS + OPTIONAL_COLUMNS)
+    unexpected = sorted(column for column in normalized.columns if column not in allowed_columns)
+    if unexpected:
+        errors.append("Unexpected columns: " + ", ".join(unexpected) + ". Use the AIA Canada template.")
+
     missing = [column for column in REQUIRED_COLUMNS if column not in normalized.columns]
     if missing:
         errors.append("Missing required columns: " + ", ".join(missing))
         return ValidationResult(None, errors, warnings)
 
-    normalized = normalized[REQUIRED_COLUMNS].copy()
+    present_optional = [column for column in OPTIONAL_COLUMNS if column in normalized.columns]
+    normalized = normalized[REQUIRED_COLUMNS + present_optional].copy()
     if normalized.empty:
         errors.append("The upload has no data rows.")
         return ValidationResult(None, errors, warnings)
     if len(normalized) > 120:
         errors.append("A contribution can contain at most 120 monthly rows.")
 
+    text_columns = ["reporting_month", "province", "shop_type"] + present_optional
+    for column in text_columns:
+        formula_like = (
+            normalized[column]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.startswith(("=", "+", "@", "\t", "\r"))
+        )
+        if formula_like.any():
+            errors.append(f"{column} contains formula-like text; enter plain values only.")
+
     periods = pd.to_datetime(normalized["reporting_month"], errors="coerce")
     if periods.isna().any():
         errors.append("reporting_month must contain valid dates or YYYY-MM values.")
     else:
-        normalized["reporting_month"] = periods.dt.to_period("M").astype(str)
+        reporting_periods = periods.dt.to_period("M")
+        if (reporting_periods > pd.Period(date.today(), freq="M")).any():
+            errors.append("reporting_month cannot be in the future.")
+        normalized["reporting_month"] = reporting_periods.astype(str)
 
     normalized["province"] = normalized["province"].astype(str).str.strip().str.upper()
     invalid_provinces = sorted(set(normalized.loc[~normalized["province"].isin(PROVINCES), "province"]))
     if invalid_provinces:
         errors.append("Unknown province or territory codes: " + ", ".join(invalid_provinces))
+
+    if "municipality" in normalized.columns:
+        normalized["municipality"] = normalized["municipality"].fillna("").astype(str).str.strip()
+        if (normalized["municipality"].str.len() > 100).any():
+            errors.append("municipality must be 100 characters or fewer.")
+
+    if "forward_sortation_area" in normalized.columns:
+        normalized["forward_sortation_area"] = (
+            normalized["forward_sortation_area"].fillna("").astype(str).str.strip().str.upper()
+        )
+        populated_fsa = normalized["forward_sortation_area"] != ""
+        invalid_fsa = normalized.loc[
+            populated_fsa
+            & ~normalized["forward_sortation_area"].str.fullmatch(r"[A-Z]\d[A-Z]"),
+            "forward_sortation_area",
+        ]
+        if not invalid_fsa.empty:
+            errors.append(
+                "forward_sortation_area must contain exactly the first three postal-code characters, "
+                "for example K1A. Do not submit a full postal code."
+            )
 
     normalized["shop_type"] = normalized["shop_type"].astype(str).str.strip().str.title()
     invalid_types = sorted(set(normalized.loc[~normalized["shop_type"].isin(SHOP_TYPES), "shop_type"]))
@@ -121,7 +165,8 @@ def validate_shop_upload(frame: pd.DataFrame) -> ValidationResult:
         if (normalized[column].dropna() <= 0).any():
             errors.append(f"{column} must be greater than zero.")
 
-    duplicates = normalized.duplicated(subset=["reporting_month", "province", "shop_type"]).sum()
+    duplicate_columns = ["reporting_month", "province", "shop_type"] + present_optional
+    duplicates = normalized.duplicated(subset=duplicate_columns).sum()
     if duplicates:
         warnings.append(f"{duplicates} possible duplicate reporting row(s) were found.")
     if normalized["hours_sold"].sum() == 0:

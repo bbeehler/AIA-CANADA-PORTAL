@@ -45,6 +45,22 @@ def test_demo_admin_can_add_a_valid_manual_dataset_row():
     assert any("Row added" in message.value for message in app.success)
 
 
+def test_demo_member_can_enter_and_submit_shop_data_manually():
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    next(button for button in app.button if button.label == "View as member").click().run()
+    portal_radio(app).set_value("Contribute Data").run()
+
+    next(button for button in app.button if button.label == "Add validated month").click().run()
+    assert not app.exception
+    assert any("Month added" in message.value for message in app.success)
+
+    next(checkbox for checkbox in app.checkbox if "authorized to submit" in checkbox.label).check()
+    next(button for button in app.button if button.label == "Submit for approval").click().run()
+
+    assert not app.exception
+    assert any("Submission received" in message.value for message in app.success)
+
+
 def test_market_demographics_links_to_benchmark_explorer():
     app = AppTest.from_file(APP, default_timeout=30).run()
     next(button for button in app.button if button.label == "View as member").click().run()

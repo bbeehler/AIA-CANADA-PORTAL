@@ -52,6 +52,8 @@ One row represents an aggregate month for a shop. Direct identifiers are prohibi
 
 Never include customer names, emails, phone numbers, addresses, VINs, licence plates, invoice numbers, work-order numbers, employee names, or free-text customer notes.
 
+Member submissions may contain at most 120 monthly rows. Future reporting months are rejected. Uploads must use only the required columns plus optional `municipality` and `forward_sortation_area`; unexpected columns and spreadsheet formula-like text are rejected. Manual entry builds the same row structure and passes through the same validator. After validation, both contribution paths are stored as normalized CSV files in private Storage and remain unavailable to other members.
+
 ## Statistics Canada demographic data
 
 Demographic observations come from the 2021 Census Profile SDMX API. Geography is keyed by the official Dissemination Geography Unique Identifier (DGUID), never by a display name.
