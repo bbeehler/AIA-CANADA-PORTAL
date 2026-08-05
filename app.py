@@ -34,6 +34,10 @@ from aia_portal.ui import inject_theme, metric_card, page_intro, source_note  # 
 from aia_portal.validation import read_uploaded_table, validate_shop_upload  # noqa: E402
 
 
+AIA_COLOUR_LOGO_URL = "https://www.aiacanada.com/wp-content/uploads/2022/09/AIA-Colour-Logo-72DPI.png"
+AIA_WHITE_LOGO_URL = "https://www.aiacanada.com/wp-content/uploads/2022/09/AIA-White-Logo-300DPI.png"
+
+
 st.set_page_config(
     page_title="AIA Canada Data Portal",
     page_icon="📊",
@@ -90,6 +94,7 @@ def clear_user() -> None:
 def login_page() -> None:
     left, right = st.columns([1.15, 0.85], gap="large")
     with left:
+        st.image(AIA_COLOUR_LOGO_URL, width=185)
         st.markdown('<div class="aia-eyebrow">Member intelligence platform</div>', unsafe_allow_html=True)
         st.title("The authoritative data hub for Canada’s auto care industry")
         st.markdown(
@@ -159,7 +164,7 @@ def get_repository(user: PortalUser):
 
 def portal_sidebar(user: PortalUser) -> str:
     with st.sidebar:
-        st.markdown('<div class="aia-logo">aia <span>Canada</span></div>', unsafe_allow_html=True)
+        st.image(AIA_WHITE_LOGO_URL, width=180)
         st.markdown('<div class="aia-logo-sub">Data Portal</div>', unsafe_allow_html=True)
         st.write("")
         pages = ["Overview", "Benchmark Explorer", "Performance Lab", "Resources", "Contribute Data"]
@@ -471,11 +476,15 @@ def resources_page(repo, user: PortalUser) -> None:
                     st.subheader(item.get("title", "Untitled"))
                     st.write(item.get("summary", ""))
                     st.caption(item.get("resource_type", "Resource"))
-                    url = item.get("external_url")
+                    url = (item.get("external_url") or "").strip()
+                    content = (item.get("content") or "").strip()
                     if url:
                         st.link_button("Open resource", url, width="stretch")
+                    elif content:
+                        with st.popover("Read in portal", width="stretch"):
+                            st.markdown(content)
                     else:
-                        st.button("Available in portal", key=f"resource-{item.get('id')}", disabled=True, width="stretch")
+                        st.caption("Resource details are being prepared by AIA Canada.")
 
 
 def contribute_page(repo, user: PortalUser) -> None:
@@ -777,15 +786,22 @@ def admin_page(repo, user: PortalUser) -> None:
                 status = st.selectbox("Status", ["draft", "published", "archived"])
                 sort_order = st.number_input("Sort order", min_value=0, value=10, step=10)
             summary = st.text_area("Summary")
+            content = st.text_area(
+                "In-portal content (optional)",
+                help="Add guidance here when the resource should open inside the portal instead of linking to another website.",
+            )
             save_resource = st.form_submit_button("Save resource", type="primary")
         if save_resource:
             if not title.strip() or not summary.strip():
                 st.error("Title and summary are required.")
+            elif status == "published" and not external_url.strip() and not content.strip():
+                st.error("A published resource needs either an external URL or in-portal content.")
             else:
                 try:
                     repo.save_resource({
                         "section": section.strip(), "title": title.strip(), "summary": summary.strip(),
                         "resource_type": resource_type, "external_url": external_url.strip() or None,
+                        "content": content.strip(),
                         "status": status, "sort_order": int(sort_order),
                     })
                     st.success("Resource saved.")

@@ -19,7 +19,8 @@ DEFAULT_RESOURCES = [
         "title": "2015 Productivity Benchmarks",
         "summary": "Benchmark repair orders, labour sales and technician productivity by shop size and region.",
         "resource_type": "Research report",
-        "external_url": "",
+        "external_url": "https://www.aiacanada.com/product/the-view-from-here-2015-productivity-benchmarks-in-the-canadian-automotive-service-sector/",
+        "content": "",
         "published_at": "2016-09-01",
         "status": "published",
         "sort_order": 10,
@@ -31,6 +32,13 @@ DEFAULT_RESOURCES = [
         "summary": "AIA Canada validates structure, removes direct identifiers and approves data before aggregation.",
         "resource_type": "Methodology",
         "external_url": "",
+        "content": (
+            "### Review process\n\n"
+            "1. **Prepare:** Members use the standard template and remove customer, employee, vehicle and invoice identifiers.\n"
+            "2. **Validate:** The portal checks the file structure, reporting period, province and numeric values.\n"
+            "3. **Review:** AIA Canada reviews each submission before approval.\n"
+            "4. **Aggregate:** Approved information may be included only in anonymized industry benchmarks; raw shop files are not published."
+        ),
         "published_at": "2026-08-01",
         "status": "published",
         "sort_order": 20,
