@@ -144,8 +144,8 @@ def clear_user() -> None:
 def login_page() -> None:
     left, right = st.columns([1.15, 0.85], gap="large")
     with left:
-        st.image(AIA_COLOUR_LOGO_URL, width=185)
-        st.markdown('<div class="aia-eyebrow">Member intelligence platform</div>', unsafe_allow_html=True)
+        st.image(AIA_COLOUR_LOGO_URL, width=135)
+        st.markdown('<div class="aia-eyebrow">Industry Intelligence Portal</div>', unsafe_allow_html=True)
         st.title("The authoritative data hub for Canada’s auto care industry")
         st.markdown(
             '<p class="aia-lead">Explore trusted benchmarks, build reports and contribute secure shop data—all in one member-only workspace.</p>',
@@ -214,8 +214,8 @@ def get_repository(user: PortalUser):
 
 def portal_sidebar(user: PortalUser) -> str:
     with st.sidebar:
-        st.image(AIA_WHITE_LOGO_URL, width=180)
-        st.markdown('<div class="aia-logo-sub">Data Portal</div>', unsafe_allow_html=True)
+        st.image(AIA_WHITE_LOGO_URL, width=115)
+        st.markdown('<div class="aia-logo-sub">Industry Intelligence Portal</div>', unsafe_allow_html=True)
         st.write("")
         pages = [
             "Overview", "Benchmark Explorer", "Performance Lab", "Market Demographics",
@@ -929,11 +929,181 @@ def resources_page(repo, user: PortalUser) -> None:
                         st.caption("Resource details are being prepared by AIA Canada.")
 
 
+def show_shop_validation(result) -> None:
+    for error in result.errors:
+        st.error(error)
+    for warning in result.warnings:
+        st.warning(warning)
+    if result.valid:
+        st.success(f"Validation passed · {len(result.data):,} row(s)")
+
+
+def shop_contribution_form(
+    repo,
+    user: PortalUser,
+    data: pd.DataFrame,
+    *,
+    filename: str,
+    form_key: str,
+    clear_manual_draft: bool = False,
+) -> None:
+    period_start = pd.to_datetime(data["reporting_month"].min()).date().replace(day=1)
+    period_end = (pd.to_datetime(data["reporting_month"].max()) + pd.offsets.MonthEnd(0)).date()
+    st.caption(f"Reporting period: {period_start:%B %Y} to {period_end:%B %Y}")
+    with st.form(form_key):
+        organization = st.text_input(
+            "Contributing organization",
+            value=user.organization,
+            key=f"{form_key}_organization",
+        )
+        notes = st.text_area(
+            "Notes for the AIA Canada reviewer",
+            placeholder="Optional context, exclusions or corrections",
+            key=f"{form_key}_notes",
+        )
+        attest = st.checkbox(
+            "I confirm this submission contains no customer, employee, vehicle or invoice-level "
+            "identifiers and I am authorized to submit it.",
+            key=f"{form_key}_attest",
+        )
+        submit = st.form_submit_button("Submit for approval", type="primary")
+    if not submit:
+        return
+    if not organization.strip():
+        st.error("Enter the contributing organization.")
+        return
+    if not attest:
+        st.error("Confirm the data and authorization statement before submitting.")
+        return
+    try:
+        normalized_payload = csv_bytes(data)
+        record = repo.submit_contribution(
+            user=user,
+            organization=organization.strip(),
+            period_start=period_start,
+            period_end=period_end,
+            filename=filename,
+            payload=normalized_payload,
+            row_count=len(data),
+            notes=notes.strip(),
+        )
+        if clear_manual_draft:
+            st.session_state["member_manual_shop_rows"] = []
+        st.success(f"Submission received · reference {record['id']}")
+        st.info("Status: Submitted. The data remains private until reviewed by AIA Canada.")
+    except Exception as exc:
+        st.error(f"The submission could not be saved: {exc}")
+
+
+def manual_shop_row_form(user: PortalUser) -> tuple[bool, dict[str, object]]:
+    default_province = user.province if user.province in PROVINCE_NAMES else "ON"
+    province_options = list(PROVINCE_NAMES)
+    with st.form("manual_shop_row_form"):
+        st.markdown("#### Add one reporting month")
+        st.caption("Add more months to the draft before submitting if needed.")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            reporting_month = st.date_input(
+                "Reporting month",
+                value=date.today().replace(day=1),
+                max_value=date.today(),
+                key="manual_reporting_month",
+            )
+            province = st.selectbox(
+                "Province or territory",
+                province_options,
+                index=province_options.index(default_province),
+                format_func=lambda code: f"{code} · {PROVINCE_NAMES[code]}",
+                key="manual_province",
+            )
+            shop_type = st.selectbox(
+                "Shop type",
+                ["Mechanical", "Tire", "Collision", "Other"],
+                key="manual_shop_type",
+            )
+        with c2:
+            municipality = st.text_input(
+                "Municipality (optional)",
+                max_chars=100,
+                key="manual_municipality",
+            )
+            forward_sortation_area = st.text_input(
+                "Postal region / FSA (optional)",
+                max_chars=3,
+                placeholder="K1A",
+                help="Enter only the first three postal-code characters—never a full postal code.",
+                key="manual_fsa",
+            )
+            bay_count = st.number_input(
+                "Service bays",
+                min_value=1,
+                value=1,
+                step=1,
+                key="manual_bay_count",
+            )
+        with c3:
+            technician_count = st.number_input(
+                "Technicians",
+                min_value=0.1,
+                value=1.0,
+                step=0.5,
+                key="manual_technician_count",
+            )
+            repair_orders = st.number_input(
+                "Repair orders",
+                min_value=0,
+                value=0,
+                step=1,
+                key="manual_repair_orders",
+            )
+            hours_sold = st.number_input(
+                "Hours sold",
+                min_value=0.0,
+                value=0.0,
+                step=0.5,
+                key="manual_hours_sold",
+            )
+
+        sales = st.columns(3)
+        with sales[0]:
+            labour_sales_cad = st.number_input(
+                "Labour sales (CAD)", min_value=0.0, value=0.0, step=100.0,
+                key="manual_labour_sales",
+            )
+        with sales[1]:
+            parts_sales_cad = st.number_input(
+                "Parts sales (CAD)", min_value=0.0, value=0.0, step=100.0,
+                key="manual_parts_sales",
+            )
+        with sales[2]:
+            tire_sales_cad = st.number_input(
+                "Tire sales (CAD)", min_value=0.0, value=0.0, step=100.0,
+                key="manual_tire_sales",
+            )
+        add_month = st.form_submit_button("Add validated month", type="primary")
+
+    return add_month, {
+        "reporting_month": reporting_month.strftime("%Y-%m"),
+        "province": province,
+        "shop_type": shop_type,
+        "bay_count": bay_count,
+        "technician_count": technician_count,
+        "repair_orders": repair_orders,
+        "hours_sold": hours_sold,
+        "labour_sales_cad": labour_sales_cad,
+        "parts_sales_cad": parts_sales_cad,
+        "tire_sales_cad": tire_sales_cad,
+        "municipality": municipality.strip(),
+        "forward_sortation_area": forward_sortation_area.strip().upper(),
+    }
+
+
 def contribute_page(repo, user: PortalUser) -> None:
     page_intro(
         "Member contribution",
         "Contribute shop data securely",
-        "Use the standard template. AIA Canada reviews every submission before any data is approved for aggregation.",
+        "Upload the standard template or enter monthly shop data manually. AIA Canada reviews every "
+        "submission before any data is approved for aggregation.",
     )
     s1, s2, s3 = st.columns(3)
     with s1:
@@ -947,7 +1117,10 @@ def contribute_page(repo, user: PortalUser) -> None:
     template = pd.read_csv(PROJECT_ROOT / "data" / "member_shop_upload_template.csv")
     d1, d2 = st.columns(2)
     with d1:
-        st.download_button("CSV template", read_template_bytes(), "aia_member_shop_template.csv", "text/csv", width="stretch")
+        st.download_button(
+            "CSV template", read_template_bytes(), "aia_member_shop_template.csv", "text/csv",
+            width="stretch",
+        )
     with d2:
         st.download_button(
             "Excel template",
@@ -957,71 +1130,85 @@ def contribute_page(repo, user: PortalUser) -> None:
             width="stretch",
         )
 
-    st.subheader("Validate and submit")
-    upload = st.file_uploader("Shop data file", type=["csv", "xlsx"], help=f"Maximum {settings.max_upload_mb} MB")
-    if not upload:
-        own = repo.contributions(user)
-        if own:
-            st.subheader("Your recent submissions")
-            st.dataframe(pd.DataFrame(own), hide_index=True, width="stretch")
-        return
-    payload = upload.getvalue()
-    if len(payload) > settings.max_upload_mb * 1024 * 1024:
-        st.error(f"The file exceeds the {settings.max_upload_mb} MB limit.")
-        return
-    try:
-        frame = read_uploaded_table(payload, upload.name)
-        result = validate_shop_upload(frame)
-    except Exception as exc:
-        st.error(f"Could not read the file: {exc}")
-        return
-    for error in result.errors:
-        st.error(error)
-    for warning in result.warnings:
-        st.warning(warning)
-    if not result.valid:
-        return
-    assert result.data is not None
-    st.success(f"Validation passed · {len(result.data):,} row(s)")
-    st.dataframe(result.data.head(20), hide_index=True, width="stretch")
-
-    default_start = pd.to_datetime(result.data["reporting_month"].min()).date().replace(day=1)
-    default_end = (pd.to_datetime(result.data["reporting_month"].max()) + pd.offsets.MonthEnd(0)).date()
-    with st.form("contribution_form"):
-        c1, c2 = st.columns(2)
-        with c1:
-            organization = st.text_input("Contributing organization", value=user.organization)
-            period_start = st.date_input("Reporting period starts", value=default_start)
-        with c2:
-            period_end = st.date_input("Reporting period ends", value=default_end)
-            notes = st.text_area("Notes for the AIA Canada reviewer", placeholder="Optional context, exclusions or corrections")
-        attest = st.checkbox(
-            "I confirm this file contains no customer, employee, vehicle or invoice-level identifiers and I am authorized to submit it."
+    upload_tab, manual_tab = st.tabs(["Upload CSV or Excel", "Enter data manually"])
+    with upload_tab:
+        st.markdown("#### Validate and submit a file")
+        upload = st.file_uploader(
+            "Shop data file",
+            type=["csv", "xlsx"],
+            help=f"Maximum {settings.max_upload_mb} MB",
+            key="member_shop_upload",
         )
-        submit = st.form_submit_button("Submit for approval", type="primary")
-    if submit:
-        if not organization.strip():
-            st.error("Enter the contributing organization.")
-        elif period_end < period_start:
-            st.error("The reporting period end must be on or after the start.")
-        elif not attest:
-            st.error("Confirm the data and authorization statement before submitting.")
-        else:
-            try:
-                record = repo.submit_contribution(
-                    user=user,
-                    organization=organization.strip(),
-                    period_start=period_start,
-                    period_end=period_end,
-                    filename=upload.name,
-                    payload=payload,
-                    row_count=len(result.data),
-                    notes=notes.strip(),
+        if upload:
+            payload = upload.getvalue()
+            if len(payload) > settings.max_upload_mb * 1024 * 1024:
+                st.error(f"The file exceeds the {settings.max_upload_mb} MB limit.")
+            else:
+                try:
+                    frame = read_uploaded_table(payload, upload.name)
+                    result = validate_shop_upload(frame)
+                except Exception as exc:
+                    st.error(f"Could not read the file: {exc}")
+                else:
+                    show_shop_validation(result)
+                    if result.valid:
+                        assert result.data is not None
+                        st.dataframe(result.data.head(20), hide_index=True, width="stretch")
+                        shop_contribution_form(
+                            repo,
+                            user,
+                            result.data,
+                            filename=f"{Path(upload.name).stem}_validated.csv",
+                            form_key="upload_contribution_form",
+                        )
+
+    with manual_tab:
+        manual_rows = st.session_state.setdefault("member_manual_shop_rows", [])
+        add_month, manual_row = manual_shop_row_form(user)
+        if add_month:
+            row_result = validate_shop_upload(pd.DataFrame([manual_row]))
+            show_shop_validation(row_result)
+            if row_result.valid:
+                assert row_result.data is not None
+                manual_rows.append(row_result.data.iloc[0].to_dict())
+                st.success(f"Month added · {len(manual_rows):,} month(s) in the current draft.")
+
+        if manual_rows:
+            manual_result = validate_shop_upload(pd.DataFrame(manual_rows))
+            st.markdown("#### Current manual submission")
+            show_shop_validation(manual_result)
+            if manual_result.valid:
+                assert manual_result.data is not None
+                st.dataframe(manual_result.data, hide_index=True, width="stretch")
+                st.download_button(
+                    "Download current draft CSV",
+                    csv_bytes(manual_result.data),
+                    file_name="aia_manual_shop_data_draft.csv",
+                    mime="text/csv",
+                    width="stretch",
                 )
-                st.success(f"Submission received · reference {record['id']}")
-                st.info("Status: Submitted. The file remains private until reviewed by AIA Canada.")
-            except Exception as exc:
-                st.error(f"The submission could not be saved: {exc}")
+                edit1, edit2 = st.columns(2)
+                if edit1.button("Remove last month", width="stretch"):
+                    manual_rows.pop()
+                    st.rerun()
+                if edit2.button("Clear draft", width="stretch"):
+                    st.session_state["member_manual_shop_rows"] = []
+                    st.rerun()
+                shop_contribution_form(
+                    repo,
+                    user,
+                    manual_result.data,
+                    filename="aia_manual_shop_submission.csv",
+                    form_key="manual_contribution_form",
+                    clear_manual_draft=True,
+                )
+        else:
+            st.info("Add a reporting month above to begin a manual submission.")
+
+    own = repo.contributions(user)
+    if own:
+        st.subheader("Your recent submissions")
+        st.dataframe(pd.DataFrame(own), hide_index=True, width="stretch")
 
 
 def dataset_metadata_fields(prefix: str) -> dict[str, object]:
