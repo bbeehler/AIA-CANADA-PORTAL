@@ -4,11 +4,15 @@ The market bridge keeps sourced facts separate from planning assumptions.
 
 ## Direct links
 
+- A selected province first resolves to the latest qualified member benchmark for that province and shop type.
+- A selected municipality or FSA inherits its province for member-data matching; raw municipality and FSA shop rows remain private.
+- If the province has fewer than five distinct contributors, the portal uses a qualified national member cohort when available and labels that fallback.
 - A selected province maps directly to the corresponding geography in the 2015 AIA productivity benchmark.
 - A selected municipality or FSA inherits its province's AIA region because the historical report did not publish municipal or postal-region auto benchmarks.
 - Manitoba and Saskatchewan map to `Prairies`; Newfoundland and Labrador, Prince Edward Island, Nova Scotia and New Brunswick map to `Atlantic`.
 - Yukon, Northwest Territories and Nunavut use the national Canada benchmark because no separate territory benchmark was published.
 - Every AIA result remains labelled as a 2015 historical survey benchmark, including shop-size cohort and sample size.
+- Current member and historical AIA values appear together only for compatible units. The portal does not equate monthly member technician hours with the historical daily measure.
 
 ## User-controlled assumptions
 
@@ -29,6 +33,8 @@ target-share revenue = annual auto care pool × target market share
 ```
 
 These outputs are directional planning lenses, not forecasts. They must not be represented as observed vehicle registrations, current consumer spending, addressable-market commitments or expected shop revenue.
+
+When a qualified member cohort exists, the scenario also shows the cohort's average monthly shop sales annualized by multiplying by 12. This is an operating-context comparison—not an input that silently changes the household-based market calculation.
 
 ## Future authoritative links
 

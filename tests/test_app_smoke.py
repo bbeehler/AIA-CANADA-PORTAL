@@ -75,3 +75,25 @@ def test_market_demographics_links_to_benchmark_explorer():
     assert portal_radio(app).value == "Benchmark Explorer"
     assert not app.exception
     assert any("Linked from Ontario" in item.value for item in app.info)
+
+
+def test_best_available_member_data_is_used_across_analytical_pages():
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    next(button for button in app.button if button.label == "View as member").click().run()
+
+    assert any("Headline indicators use qualified approved member data" in item.value for item in app.success)
+
+    portal_radio(app).set_value("Performance Lab").run()
+    next(field for field in app.selectbox if field.label == "Comparison measure").set_value(
+        "hours_repair_order"
+    ).run()
+    assert any("current-member cohort" in item.value for item in app.success)
+
+    portal_radio(app).set_value("Benchmark Explorer").run()
+    next(field for field in app.selectbox if field.label == "Measure").set_value(
+        "average_hours_repair_order"
+    ).run()
+    assert any("Current values represent all submitted shop sizes" in item.value for item in app.caption)
+
+    portal_radio(app).set_value("Market Demographics").run()
+    assert any("directly linked" in item.value for item in app.success)

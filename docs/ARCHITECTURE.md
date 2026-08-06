@@ -26,6 +26,7 @@ flowchart TD
 - Approval revalidates the normalized CSV, imports shop-month rows into `approved_shop_observations`, and rebuilds `member_benchmark_aggregates`. Changing an approved contribution to rejected or archived removes its effect on the next rebuild.
 - `approved_shop_observations` is protected by RLS and is available only to active administrators. Members query only `member_benchmark_aggregates`, which never stores a cohort with fewer than five distinct contributor accounts.
 - Aggregation is national and provincial by month and shop type. Municipality and FSA cuts remain excluded because the present participation volume is too small for safe local publication.
+- A shared application resolver applies the same source precedence in Overview, Benchmark Explorer, Performance Lab and Market Demographics: qualified provincial member cohort, qualified national member fallback, then the historical 2015 benchmark. The resolver never treats incompatible units as direct comparisons.
 - Dataset “removal” defaults to archive. This preserves provenance and supports auditability.
 - Statistics Canada data is synchronized by a trusted operator using a temporary server-side secret-key environment variable. Streamlit reads cached Supabase snapshots and never receives that key.
 - Municipalities use census subdivisions and postal analysis uses three-character FSAs. Full postal codes are prohibited from member uploads.
@@ -51,6 +52,7 @@ flowchart TD
 3. Approved shop-month rows enter the administrator-only observation table with contribution provenance.
 4. A security-invoker database function rebuilds the aggregate table as the signed-in administrator. RLS remains authoritative; no service key is present in Streamlit.
 5. Only cohorts containing at least five distinct contributor accounts are stored. Members can chart and export these national or provincial aggregates from **Member Data Pool**.
+6. Other analytical pages consume the same aggregate table. Compatible current measures include hours per repair order and monthly repair orders (annualized only when explicitly compared with the historical annual measure). Historical daily, percentage and shop-size measures remain labelled historical when the contribution contract has no equivalent.
 
 Validated administrator dataset drafts are source-file records, not automatically published dashboard observations. Promotion into analytical tables remains a separate governed action so review and dataset-version selection can be added without silently mixing reporting years.
 

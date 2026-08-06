@@ -9,6 +9,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 - Member login and separate membership approval status
 - Dashboard, regional benchmark explorer, cohort comparison and opportunity calculator
 - Privacy-safe Member Data Pool with current monthly shop benchmarks and exports
+- Shared best-available-source resolver used by Overview, Benchmark Explorer, Performance Lab and Market Demographics
 - CSV, Excel and PDF report exports
 - Standardized CSV/XLSX shop-data contribution template
 - Upload validation and PII-column rejection
@@ -92,6 +93,8 @@ Administrators add member resources from **Admin Centre → Content CMS**. Choos
 Administrators stage new benchmark source files from **Admin Centre → Datasets**. Choose the regional/shop-size or performance-cohort contract, download its CSV template, and upload the completed file. The same rules validate manual row entry. Valid drafts are normalized before private Storage upload; invalid columns, values, ranges, duplicates, slugs and formula-like text are rejected.
 
 Administrators approve member submissions from **Admin Centre → Contribution queue**. Approval revalidates the normalized file, imports its shop-month rows into an administrator-only observation table, and refreshes the member benchmark pool. National and provincial cohorts appear in **Member Data Pool** only when at least five distinct contributor accounts are represented for the same month and shop type. Raw shop rows are never exposed to members.
+
+The sidebar **Analytics source** control defaults to **Best available · current + historical**. Every analytical page checks for a qualified current member cohort first. If none exists—or the current contribution contract does not contain a directly compatible measure—the page uses the 2015 AIA benchmark and explains the fallback. Selecting **Historical benchmark only** provides a reproducible seed-report view.
 
 ## Deploy on Streamlit Community Cloud
 

@@ -8,9 +8,10 @@ const uuidPattern =
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type UserAction = {
-  action?: "update" | "delete";
+  action?: "create" | "update" | "delete";
   user_id?: string;
   email?: string;
+  password?: string;
   full_name?: string;
   organization?: string;
   province?: string;
@@ -58,12 +59,80 @@ export default {
       return json({ error: "A valid JSON request is required" }, 400);
     }
 
+    if (
+      payload.action !== "create" &&
+      payload.action !== "update" &&
+      payload.action !== "delete"
+    ) {
+      return json({ error: "Action must be create, update or delete" }, 400);
+    }
+
+    if (payload.action === "create") {
+      const email = String(payload.email ?? "").trim().toLowerCase();
+      const password = String(payload.password ?? "");
+      const fullName = String(payload.full_name ?? "").trim();
+      const organization = String(payload.organization ?? "").trim();
+      const province = String(payload.province ?? "").trim().toUpperCase();
+      const role = String(payload.role ?? "member");
+      const membershipStatus = String(payload.membership_status ?? "pending");
+
+      if (!emailPattern.test(email) || email.length > 320) {
+        return json({ error: "Enter a valid email address" }, 400);
+      }
+      if (password.length < 10 || password.length > 128) {
+        return json({ error: "Temporary password must be 10 to 128 characters" }, 400);
+      }
+      if (fullName.length > 160 || organization.length > 200 || province.length > 20) {
+        return json({ error: "One or more profile fields are too long" }, 400);
+      }
+      if (!roles.has(role) || !membershipStatuses.has(membershipStatus)) {
+        return json({ error: "Invalid role or membership status" }, 400);
+      }
+
+      const { data: created, error: createError } =
+        await adminClient.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+      if (createError || !created.user) {
+        return json({ error: createError?.message ?? "Could not create user" }, 400);
+      }
+
+      const createdUserId = created.user.id;
+      const { data: createdProfile, error: profileError } = await adminClient
+        .from("profiles")
+        .update({
+          email,
+          full_name: fullName,
+          organization,
+          province,
+          role,
+          membership_status: membershipStatus,
+        })
+        .eq("id", createdUserId)
+        .select("id, email, full_name, organization, province, role, membership_status")
+        .single();
+
+      if (profileError || !createdProfile) {
+        await adminClient.auth.admin.deleteUser(createdUserId, false);
+        return json({ error: profileError?.message ?? "Could not create portal profile" }, 400);
+      }
+
+      const { error: auditError } = await adminClient.from("audit_log").insert({
+        actor_id: callerId,
+        action: "member_created",
+        entity_type: "profile",
+        entity_id: createdUserId,
+        details: { role, membership_status: membershipStatus },
+      });
+      if (auditError) console.error("User creation audit failed", auditError);
+      return json({ user: createdProfile }, 201);
+    }
+
     const targetUserId = String(payload.user_id ?? "");
     if (!uuidPattern.test(targetUserId)) {
       return json({ error: "A valid user ID is required" }, 400);
-    }
-    if (payload.action !== "update" && payload.action !== "delete") {
-      return json({ error: "Action must be update or delete" }, 400);
     }
 
     const { data: targetProfile, error: targetError } = await adminClient
