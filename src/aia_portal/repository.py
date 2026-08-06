@@ -42,7 +42,7 @@ DEFAULT_RESOURCES = [
             "1. **Prepare:** Members use the standard template and remove customer, employee, vehicle and invoice identifiers.\n"
             "2. **Validate:** The portal checks the file structure, reporting period, province and numeric values.\n"
             "3. **Review:** AIA Canada reviews each submission before approval.\n"
-            "4. **Aggregate:** Approved information may be included only in anonymized industry benchmarks; raw shop files are not published."
+            "4. **Aggregate:** Approved rows enter the governed data pool automatically. Only cohorts with at least five distinct contributors are published; raw shop figures remain private."
         ),
         "published_at": "2026-08-01",
         "status": "published",
@@ -72,12 +72,77 @@ DEMO_DEMOGRAPHIC_VALUES = [
     ("unemployment_rate", "Unemployment rate", "Workforce", "percent", "2021", 12.2),
 ]
 
+DEMO_MEMBER_BENCHMARKS = [
+    {
+        "reporting_month": month,
+        "geography_type": geography_type,
+        "geography_code": geography_code,
+        "shop_type": "Mechanical",
+        "contributor_count": contributors,
+        "submitted_row_count": contributors,
+        "privacy_threshold": 5,
+        "average_bay_count": 5.1,
+        "average_technician_count": 4.2,
+        "average_repair_orders": repair_orders,
+        "average_hours_sold": hours_sold,
+        "hours_per_repair_order": round(hours_sold / repair_orders, 2),
+        "hours_per_technician": round(hours_sold / 4.2, 2),
+        "average_labour_sales_cad": labour_sales,
+        "average_parts_sales_cad": parts_sales,
+        "average_tire_sales_cad": tire_sales,
+        "average_total_sales_cad": labour_sales + parts_sales + tire_sales,
+        "sales_per_repair_order_cad": round(
+            (labour_sales + parts_sales + tire_sales) / repair_orders, 2
+        ),
+        "refreshed_at": "2026-08-06T10:00:00+00:00",
+    }
+    for month, geography_type, geography_code, contributors, repair_orders, hours_sold,
+    labour_sales, parts_sales, tire_sales in [
+        ("2026-04-01", "national", "CA", 9, 205, 398, 49_800, 70_100, 8_200),
+        ("2026-05-01", "national", "CA", 10, 214, 421, 52_400, 73_800, 9_100),
+        ("2026-06-01", "national", "CA", 11, 221, 439, 54_700, 76_600, 9_800),
+        ("2026-04-01", "province", "ON", 6, 211, 410, 51_200, 72_300, 7_900),
+        ("2026-05-01", "province", "ON", 7, 219, 432, 53_500, 75_100, 8_700),
+        ("2026-06-01", "province", "ON", 7, 226, 447, 55_900, 78_200, 9_400),
+    ]
+]
+
+CONTRIBUTION_REVIEW_STATUSES = {"in_review", "approved", "rejected", "archived"}
+
+
+def contribution_observation_rows(
+    contribution: dict[str, Any], data: pd.DataFrame
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, item in data.reset_index(drop=True).iterrows():
+        municipality = str(item.get("municipality") or "").strip() or None
+        fsa = str(item.get("forward_sortation_area") or "").strip().upper() or None
+        rows.append({
+            "contribution_id": contribution["id"],
+            "contributor_id": contribution["contributor_id"],
+            "row_number": index + 1,
+            "reporting_month": f"{item['reporting_month']}-01",
+            "province": str(item["province"]),
+            "municipality": municipality,
+            "forward_sortation_area": fsa,
+            "shop_type": str(item["shop_type"]),
+            "bay_count": float(item["bay_count"]),
+            "technician_count": float(item["technician_count"]),
+            "repair_orders": float(item["repair_orders"]),
+            "hours_sold": float(item["hours_sold"]),
+            "labour_sales_cad": float(item["labour_sales_cad"]),
+            "parts_sales_cad": float(item["parts_sales_cad"]),
+            "tire_sales_cad": float(item["tire_sales_cad"]),
+        })
+    return rows
+
 
 class DemoRepository:
     def __init__(self, state: MutableMapping[str, Any]):
         self.state = state
         self.state.setdefault("demo_contributions", [])
         self.state.setdefault("demo_contribution_payloads", {})
+        self.state.setdefault("demo_approved_shop_observations", [])
         self.state.setdefault("demo_resources", [dict(item) for item in DEFAULT_RESOURCES])
         self.state.setdefault("demo_datasets", [{
             "id": "dataset-aia-2015",
@@ -114,6 +179,9 @@ class DemoRepository:
 
     def performance_benchmarks(self) -> pd.DataFrame:
         return load_performance_benchmarks().copy()
+
+    def member_benchmark_aggregates(self) -> pd.DataFrame:
+        return pd.DataFrame(DEMO_MEMBER_BENCHMARKS).copy()
 
     def resources(self, include_unpublished: bool = False) -> list[dict[str, Any]]:
         resources = list(self.state["demo_resources"])
@@ -266,16 +334,47 @@ class DemoRepository:
         self.state["demo_contributions"] = [
             item for item in self.state["demo_contributions"] if item["contributor_id"] != user_id
         ]
+        self.state["demo_approved_shop_observations"] = [
+            item
+            for item in self.state["demo_approved_shop_observations"]
+            if item["contributor_id"] != user_id
+        ]
         for contribution_id in deleted_contribution_ids:
             self.state["demo_contribution_payloads"].pop(contribution_id, None)
         self.state["demo_users"] = [item for item in self.state["demo_users"] if item["id"] != user_id]
 
-    def review_contribution(self, contribution_id: str, status: str, admin_notes: str) -> None:
+    def review_contribution(
+        self, contribution_id: str, status: str, admin_notes: str
+    ) -> dict[str, int]:
+        if status not in CONTRIBUTION_REVIEW_STATUSES:
+            raise ValueError("Unknown contribution review status")
         for record in self.state["demo_contributions"]:
             if record["id"] == contribution_id:
+                ingested_row_count = 0
+                if status == "approved":
+                    payload = self.download_contribution(record)
+                    validation = validate_shop_upload(read_uploaded_table(payload, record["original_filename"]))
+                    if not validation.valid or validation.data is None:
+                        raise ValueError(
+                            "Contribution validation failed: " + " ".join(validation.errors)
+                        )
+                    approved_rows = contribution_observation_rows(record, validation.data)
+                    self.state["demo_approved_shop_observations"] = [
+                        item
+                        for item in self.state["demo_approved_shop_observations"]
+                        if item["contribution_id"] != contribution_id
+                    ]
+                    self.state["demo_approved_shop_observations"].extend(approved_rows)
+                    ingested_row_count = len(approved_rows)
+                    record["ingested_row_count"] = ingested_row_count
+                    record["ingested_at"] = datetime.now(timezone.utc).isoformat()
                 record["status"] = status
                 record["admin_notes"] = admin_notes
-                return
+                record["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+                return {
+                    "ingested_row_count": ingested_row_count,
+                    "aggregate_count": len(DEMO_MEMBER_BENCHMARKS),
+                }
         raise KeyError("Contribution not found")
 
     def download_contribution(self, contribution: dict[str, Any]) -> bytes:
@@ -343,6 +442,15 @@ class SupabaseRepository:
 
     def performance_benchmarks(self) -> pd.DataFrame:
         response = self.client.table("performance_benchmarks").select("*").execute()
+        return pd.DataFrame(response.data or [])
+
+    def member_benchmark_aggregates(self) -> pd.DataFrame:
+        response = (
+            self.client.table("member_benchmark_aggregates")
+            .select("*")
+            .order("reporting_month", desc=True)
+            .execute()
+        )
         return pd.DataFrame(response.data or [])
 
     def resources(self, include_unpublished: bool = False) -> list[dict[str, Any]]:
@@ -491,12 +599,66 @@ class SupabaseRepository:
             "responseType": "json",
         })
 
-    def review_contribution(self, contribution_id: str, status: str, admin_notes: str) -> None:
-        self.client.table("contributions").update({
-            "status": status,
-            "admin_notes": admin_notes,
-            "reviewed_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", contribution_id).execute()
+    def review_contribution(
+        self, contribution_id: str, status: str, admin_notes: str
+    ) -> dict[str, int]:
+        if status not in CONTRIBUTION_REVIEW_STATUSES:
+            raise ValueError("Unknown contribution review status")
+        response = (
+            self.client.table("contributions")
+            .select("*")
+            .eq("id", contribution_id)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise KeyError("Contribution not found")
+        contribution = dict(response.data[0])
+        reviewed_at = datetime.now(timezone.utc).isoformat()
+        ingested_row_count = 0
+
+        if status == "approved":
+            payload = self.download_contribution(contribution)
+            validation = validate_shop_upload(
+                read_uploaded_table(payload, contribution["original_filename"])
+            )
+            if not validation.valid or validation.data is None:
+                raise ValueError("Contribution validation failed: " + " ".join(validation.errors))
+            approved_rows = contribution_observation_rows(contribution, validation.data)
+
+            # Remove any previously published effect before replacing an approved submission.
+            self.client.table("contributions").update({
+                "status": "in_review",
+                "admin_notes": admin_notes,
+                "reviewed_at": reviewed_at,
+            }).eq("id", contribution_id).execute()
+            self.client.rpc("rebuild_member_benchmark_aggregates").execute()
+            self.client.table("approved_shop_observations").delete().eq(
+                "contribution_id", contribution_id
+            ).execute()
+            if approved_rows:
+                self.client.table("approved_shop_observations").insert(approved_rows).execute()
+            ingested_row_count = len(approved_rows)
+            self.client.table("contributions").update({
+                "status": "approved",
+                "admin_notes": admin_notes,
+                "reviewed_at": reviewed_at,
+                "ingested_row_count": ingested_row_count,
+                "ingested_at": reviewed_at,
+            }).eq("id", contribution_id).execute()
+        else:
+            self.client.table("contributions").update({
+                "status": status,
+                "admin_notes": admin_notes,
+                "reviewed_at": reviewed_at,
+            }).eq("id", contribution_id).execute()
+
+        aggregate_response = self.client.rpc("rebuild_member_benchmark_aggregates").execute()
+        aggregate_count = int(aggregate_response.data or 0)
+        return {
+            "ingested_row_count": ingested_row_count,
+            "aggregate_count": aggregate_count,
+        }
 
     def download_contribution(self, contribution: dict[str, Any]) -> bytes:
         return self.client.storage.from_("member-contributions").download(contribution["storage_path"])

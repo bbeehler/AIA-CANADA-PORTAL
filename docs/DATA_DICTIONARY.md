@@ -54,6 +54,26 @@ Never include customer names, emails, phone numbers, addresses, VINs, licence pl
 
 Member submissions may contain at most 120 monthly rows. Future reporting months are rejected. Uploads must use only the required columns plus optional `municipality` and `forward_sortation_area`; unexpected columns and spreadsheet formula-like text are rejected. Manual entry builds the same row structure and passes through the same validator. After validation, both contribution paths are stored as normalized CSV files in private Storage and remain unavailable to other members.
 
+### Approved shop observation pool
+
+Approval repeats contribution validation and imports normalized rows into `approved_shop_observations`. Every row retains `contribution_id`, `contributor_id`, and `row_number` for provenance and idempotent reprocessing. This table contains shop-level monthly values and is available only to active administrators through RLS.
+
+`member_benchmark_aggregates` is the only contribution-derived table visible to active members. Rows are grouped by reporting month, shop type, and either Canada or province. A row is stored only when at least five distinct contributor accounts are represented.
+
+| Aggregate field | Meaning |
+|---|---|
+| `contributor_count` | Distinct contributor accounts represented; always at least the privacy threshold |
+| `submitted_row_count` | Validated shop-month rows included in the cohort |
+| `privacy_threshold` | Minimum distinct contributors required; initially `5` |
+| `average_repair_orders` | Mean monthly repair orders per submitted row |
+| `average_hours_sold` | Mean monthly hours sold per submitted row |
+| `hours_per_repair_order` | Cohort total hours sold divided by cohort total repair orders |
+| `hours_per_technician` | Cohort total hours sold divided by cohort total technician count |
+| `average_*_sales_cad` | Mean labour, parts, tire, or combined monthly sales per submitted row |
+| `sales_per_repair_order_cad` | Cohort total sales divided by cohort total repair orders |
+
+Municipality and FSA values remain in the private observation table for future governed analysis but are not currently used in member-facing aggregates.
+
 ## Statistics Canada demographic data
 
 Demographic observations come from the 2021 Census Profile SDMX API. Geography is keyed by the official Dissemination Geography Unique Identifier (DGUID), never by a display name.

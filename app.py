@@ -218,8 +218,8 @@ def portal_sidebar(user: PortalUser) -> str:
         st.markdown('<div class="aia-logo-sub">Industry Intelligence Portal</div>', unsafe_allow_html=True)
         st.write("")
         pages = [
-            "Overview", "Benchmark Explorer", "Performance Lab", "Market Demographics",
-            "Resources", "Contribute Data",
+            "Overview", "Benchmark Explorer", "Performance Lab", "Member Data Pool",
+            "Market Demographics", "Resources", "Contribute Data",
         ]
         if user.is_admin:
             pages.append("Admin Centre")
@@ -537,6 +537,185 @@ def performance_page(repo) -> None:
     st.warning(
         "The two opportunity lenses can overlap and should not be added together. They are conversation starters for scheduling, inspection, advisor capacity and technician utilization."
     )
+
+
+def member_data_pool_page(repo) -> None:
+    page_intro(
+        "Current member benchmarks",
+        "Turn approved shop data into industry intelligence",
+        "Explore monthly, privacy-safe benchmarks created from validated member submissions. Raw shop "
+        "figures remain private and never appear in this view.",
+    )
+    st.info(
+        "Privacy rule: A benchmark is created only when at least five independent contributors are "
+        "represented in the same month, geography and shop type. Smaller cohorts are suppressed."
+    )
+    data = repo.member_benchmark_aggregates()
+    if data.empty:
+        st.warning(
+            "Approved data is entering the governed pool, but no cohort has reached the five-contributor "
+            "privacy threshold yet. This page will populate automatically as participation grows."
+        )
+        return
+
+    numeric_columns = [
+        "contributor_count", "submitted_row_count", "average_bay_count",
+        "average_technician_count", "average_repair_orders", "average_hours_sold",
+        "hours_per_repair_order", "hours_per_technician", "average_labour_sales_cad",
+        "average_parts_sales_cad", "average_tire_sales_cad", "average_total_sales_cad",
+        "sales_per_repair_order_cad",
+    ]
+    for column in numeric_columns:
+        if column in data.columns:
+            data[column] = pd.to_numeric(data[column], errors="coerce")
+    data["reporting_month"] = pd.to_datetime(data["reporting_month"], errors="coerce")
+    data = data.dropna(subset=["reporting_month"]).copy()
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        geography_type = st.segmented_control(
+            "Geographic view",
+            ["national", "province"],
+            default="national",
+            format_func=lambda value: value.title(),
+            key="member_pool_geography_type",
+        )
+    geography_options = sorted(
+        data.loc[data["geography_type"] == geography_type, "geography_code"].dropna().unique()
+    )
+    if not geography_options:
+        st.warning("No privacy-safe benchmarks are available for that geographic view yet.")
+        return
+    with c2:
+        geography_code = st.selectbox(
+            "Geography",
+            geography_options,
+            format_func=lambda code: "Canada" if code == "CA" else PROVINCE_NAMES.get(code, code),
+            key="member_pool_geography",
+        )
+    shop_options = sorted(
+        data.loc[
+            (data["geography_type"] == geography_type)
+            & (data["geography_code"] == geography_code),
+            "shop_type",
+        ].dropna().unique()
+    )
+    with c3:
+        shop_type = st.selectbox("Shop type", shop_options, key="member_pool_shop_type")
+
+    scoped = data[
+        (data["geography_type"] == geography_type)
+        & (data["geography_code"] == geography_code)
+        & (data["shop_type"] == shop_type)
+    ].sort_values("reporting_month")
+    if scoped.empty:
+        st.warning("No privacy-safe benchmark rows match that selection.")
+        return
+    latest = scoped.iloc[-1]
+    latest_label = latest["reporting_month"].strftime("%B %Y")
+
+    cards = st.columns(4)
+    with cards[0]:
+        metric_card(
+            "Contributors",
+            f"{int(latest['contributor_count']):,}",
+            f"Independent contributors · {latest_label}",
+        )
+    with cards[1]:
+        metric_card(
+            "Hours / repair order",
+            format_metric(latest["hours_per_repair_order"], "hours"),
+            "Approved member data",
+        )
+    with cards[2]:
+        metric_card(
+            "Average monthly sales",
+            format_metric(latest["average_total_sales_cad"], "cad"),
+            "Per submitted shop-month row",
+        )
+    with cards[3]:
+        metric_card(
+            "Sales / repair order",
+            format_metric(latest["sales_per_repair_order_cad"], "cad"),
+            "Labour, parts and tire sales",
+        )
+
+    trend1, trend2 = st.columns(2)
+    with trend1:
+        hours_fig = px.line(
+            scoped,
+            x="reporting_month",
+            y="hours_per_repair_order",
+            markers=True,
+            title="Hours sold per repair order",
+            labels={"reporting_month": "Month", "hours_per_repair_order": "Hours"},
+        )
+        hours_fig.update_traces(line_color="#1B5B83")
+        chart(hours_fig)
+    with trend2:
+        sales_fig = px.bar(
+            scoped,
+            x="reporting_month",
+            y="average_total_sales_cad",
+            title="Average monthly sales per submitted row",
+            labels={"reporting_month": "Month", "average_total_sales_cad": "CAD"},
+            color_discrete_sequence=["#D7263D"],
+        )
+        chart(sales_fig)
+
+    st.subheader(f"Sales mix · {latest_label}")
+    sales_mix = pd.DataFrame({
+        "Category": ["Labour", "Parts", "Tires"],
+        "Average sales (CAD)": [
+            latest["average_labour_sales_cad"],
+            latest["average_parts_sales_cad"],
+            latest["average_tire_sales_cad"],
+        ],
+    })
+    mix_fig = px.bar(
+        sales_mix,
+        x="Category",
+        y="Average sales (CAD)",
+        color="Category",
+        text_auto="$.3s",
+        color_discrete_sequence=["#123E5A", "#1B5B83", "#D7263D"],
+    )
+    chart(mix_fig)
+
+    table_columns = [
+        "reporting_month", "geography_code", "shop_type", "contributor_count",
+        "average_repair_orders", "average_hours_sold", "hours_per_repair_order",
+        "average_total_sales_cad", "sales_per_repair_order_cad", "refreshed_at",
+    ]
+    export_data = scoped[[column for column in table_columns if column in scoped.columns]].copy()
+    export_data["reporting_month"] = export_data["reporting_month"].dt.strftime("%Y-%m")
+    st.subheader("Privacy-safe aggregate table")
+    st.dataframe(export_data, hide_index=True, width="stretch")
+    e1, e2 = st.columns(2)
+    with e1:
+        st.download_button(
+            "Download CSV",
+            csv_bytes(export_data),
+            "aia_member_data_pool.csv",
+            "text/csv",
+            width="stretch",
+        )
+    with e2:
+        st.download_button(
+            "Download Excel",
+            excel_report_bytes(
+                export_data,
+                title="AIA Canada member data pool",
+                filters={
+                    "Geography": "Canada" if geography_code == "CA" else geography_code,
+                    "Shop type": shop_type,
+                    "Privacy threshold": "Minimum 5 independent contributors",
+                },
+            ),
+            "aia_member_data_pool.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            width="stretch",
+        )
 
 
 def _demographic_display(item: dict | None) -> str:
@@ -1437,7 +1616,8 @@ def admin_page(repo, user: PortalUser) -> None:
         else:
             table = pd.DataFrame(contributions)
             visible_columns = [column for column in [
-                "id", "organization", "original_filename", "row_count", "status", "submitted_at", "admin_notes"
+                "id", "organization", "original_filename", "row_count", "status",
+                "ingested_row_count", "ingested_at", "submitted_at", "admin_notes"
             ] if column in table.columns]
             st.dataframe(table[visible_columns], hide_index=True, width="stretch")
             labels = {f"{item.get('organization')} · {item.get('original_filename')} · {item.get('id')}": item for item in contributions}
@@ -1449,8 +1629,26 @@ def admin_page(repo, user: PortalUser) -> None:
                 review = st.form_submit_button("Save review", type="primary")
             if review:
                 try:
-                    repo.review_contribution(selected["id"], decision, admin_notes.strip())
-                    st.success("Contribution status updated. Approval does not automatically publish raw shop data.")
+                    review_result = repo.review_contribution(
+                        selected["id"], decision, admin_notes.strip()
+                    )
+                    if decision == "approved":
+                        st.success(
+                            f"Contribution approved and {review_result['ingested_row_count']:,} validated "
+                            "row(s) added to the governed data pool."
+                        )
+                        if review_result["aggregate_count"]:
+                            st.info(
+                                f"Privacy-safe member benchmarks refreshed · "
+                                f"{review_result['aggregate_count']:,} aggregate cohort(s) available."
+                            )
+                        else:
+                            st.info(
+                                "The contribution is in the pool. Its cohorts remain suppressed until at "
+                                "least five independent contributors are represented."
+                            )
+                    else:
+                        st.success("Contribution status updated and member aggregates refreshed.")
                 except Exception as exc:
                     st.error(f"Could not save the review: {exc}")
             try:
@@ -1851,6 +2049,8 @@ elif page == "Benchmark Explorer":
     explorer_page(repository)
 elif page == "Performance Lab":
     performance_page(repository)
+elif page == "Member Data Pool":
+    member_data_pool_page(repository)
 elif page == "Market Demographics":
     demographics_page(repository, user)
 elif page == "Resources":

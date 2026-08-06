@@ -8,6 +8,7 @@ The app runs immediately in demo mode and switches to production Supabase servic
 
 - Member login and separate membership approval status
 - Dashboard, regional benchmark explorer, cohort comparison and opportunity calculator
+- Privacy-safe Member Data Pool with current monthly shop benchmarks and exports
 - CSV, Excel and PDF report exports
 - Standardized CSV/XLSX shop-data contribution template
 - Upload validation and PII-column rejection
@@ -90,6 +91,8 @@ Administrators add member resources from **Admin Centre → Content CMS**. Choos
 
 Administrators stage new benchmark source files from **Admin Centre → Datasets**. Choose the regional/shop-size or performance-cohort contract, download its CSV template, and upload the completed file. The same rules validate manual row entry. Valid drafts are normalized before private Storage upload; invalid columns, values, ranges, duplicates, slugs and formula-like text are rejected.
 
+Administrators approve member submissions from **Admin Centre → Contribution queue**. Approval revalidates the normalized file, imports its shop-month rows into an administrator-only observation table, and refreshes the member benchmark pool. National and provincial cohorts appear in **Member Data Pool** only when at least five distinct contributor accounts are represented for the same month and shop type. Raw shop rows are never exposed to members.
+
 ## Deploy on Streamlit Community Cloud
 
 1. Push this directory to the GitHub repository and select `app.py` as the entrypoint in Streamlit.
@@ -126,7 +129,7 @@ Administrators stage new benchmark source files from **Admin Centre → Datasets
 
 - The included research is from 2015 and is always labelled as historical. It should not be presented as the current Canadian market.
 - Member uploads are aggregate monthly shop data only. Direct customer, employee, vehicle and invoice identifiers are prohibited.
-- “Approved” contributions remain private. AIA Canada must perform a separate aggregation/suppression process before publishing any derived dataset.
+- Approved contributions are imported into an administrator-only observation table and automatically included in privacy-safe member aggregates. Cohorts below five distinct contributors are suppressed and never stored in the member-facing table.
 - Archive datasets instead of hard-deleting them unless a documented privacy or legal requirement requires deletion.
 
 ## Verification
@@ -140,4 +143,4 @@ python -m compileall -q app.py src scripts
 
 ## Next product decisions
 
-Before production launch, AIA Canada should confirm bilingual scope, data-sharing terms, minimum cohort suppression thresholds, retention rules, admin MFA, recovery flows, and whether shop users belong to organization-level accounts.
+Before production launch, AIA Canada should confirm bilingual scope, data-sharing terms, whether the five-contributor threshold should be higher for specific measures, retention rules, admin MFA, recovery flows, and whether shop users belong to organization-level accounts.
