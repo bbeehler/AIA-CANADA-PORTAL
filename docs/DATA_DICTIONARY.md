@@ -74,6 +74,16 @@ Approval repeats contribution validation and imports normalized rows into `appro
 
 Municipality and FSA values remain in the private observation table for future governed analysis but are not currently used in member-facing aggregates.
 
+### Cross-portal source precedence
+
+The default analytics mode is `Best available · current + historical`:
+
+1. use the latest qualified provincial member cohort for a selected province, municipality or FSA;
+2. fall back to the latest qualified national member cohort when the province is suppressed;
+3. fall back to the mapped 2015 AIA region or national benchmark when no compatible current cohort exists.
+
+`hours_per_repair_order` is directly comparable with the historical hours-per-repair-order measure. `average_repair_orders` may be multiplied by 12 only when clearly labelled as an annualized monthly member average. Monthly `hours_per_technician` is not interchangeable with the historical daily technician-productivity measure. Shop-size, affiliation and historical percentage measures remain historical until the governed contribution contract collects compatible fields.
+
 ## Statistics Canada demographic data
 
 Demographic observations come from the 2021 Census Profile SDMX API. Geography is keyed by the official Dissemination Geography Unique Identifier (DGUID), never by a display name.

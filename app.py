@@ -21,6 +21,15 @@ from aia_portal.auth import (  # noqa: E402
     SupabaseAuth,
     authenticated_client,
 )
+from aia_portal.analytics import (  # noqa: E402
+    CURRENT_METRIC_MAP,
+    SOURCE_BEST_AVAILABLE,
+    SOURCE_HISTORICAL_ONLY,
+    SOURCE_OPTIONS,
+    current_explorer_comparison,
+    normalize_member_benchmarks,
+    select_member_benchmark,
+)
 from aia_portal.config import load_settings  # noqa: E402
 from aia_portal.data import (  # noqa: E402
     METRICS,
@@ -114,6 +123,10 @@ def chart(fig: go.Figure) -> None:
             "toImageButtonOptions": {"format": "png", "filename": "aia-canada-chart", "scale": 2},
         },
     )
+
+
+def current_data_enabled() -> bool:
+    return st.session_state.get("analytics_source_mode", SOURCE_BEST_AVAILABLE) != SOURCE_HISTORICAL_ONLY
 
 
 def render_resource_content(content: str, content_format: str) -> None:
@@ -229,6 +242,17 @@ def portal_sidebar(user: PortalUser) -> str:
         if st.session_state.get("portal_page") not in pages:
             st.session_state["portal_page"] = "Overview"
         current = st.radio("Portal", pages, label_visibility="collapsed", key="portal_page")
+        st.caption("ANALYTICS SOURCE")
+        st.selectbox(
+            "Analytics source",
+            SOURCE_OPTIONS,
+            key="analytics_source_mode",
+            label_visibility="collapsed",
+            help=(
+                "Best available uses qualified current member data first and keeps the 2015 AIA "
+                "benchmark as historical context or fallback."
+            ),
+        )
         st.divider()
         st.markdown(f"**{escape(user.full_name)}**", unsafe_allow_html=True)
         st.caption(user.organization or user.email)
@@ -250,25 +274,67 @@ def overview_page(repo) -> None:
     page_intro(
         "Industry pulse",
         "A clear view of shop productivity",
-        "Start with national benchmarks, then move from signal to detail using the explorer and performance lab.",
+        "Start with the newest qualified member benchmarks, with the 2015 AIA report retained as the "
+        "historical foundation and fallback.",
     )
     performance = repo.performance_benchmarks()
     mechanical_all = performance[
         (performance["shop_type"] == "Mechanical") & (performance["cohort"] == "All shops")
     ].set_index("metric_code")
+    member_data = normalize_member_benchmarks(repo.member_benchmark_aggregates())
+    member_selection = select_member_benchmark(member_data, shop_type="Mechanical")
+    use_member = current_data_enabled() and member_selection.available
 
     cards = st.columns(4)
-    values = [
-        ("Survey respondents", "572", "Canadian automotive service providers"),
-        ("Hours / repair order", format_metric(mechanical_all.loc["hours_repair_order", "value"], "hours"), "Mechanical shop average"),
-        ("Hours / technician / day", format_metric(mechanical_all.loc["hours_technician_day", "value"], "hours"), "55% of an eight-hour day"),
-        ("Hiring intention", "57%", "Planned to hire a technician"),
-    ]
+    if use_member:
+        current = member_selection.record
+        period = pd.to_datetime(current["reporting_month"]).strftime("%B %Y")
+        values = [
+            ("Current contributors", f"{int(current['contributor_count']):,}", f"Qualified national cohort · {period}"),
+            ("Hours / repair order", format_metric(current["hours_per_repair_order"], "hours"), "Approved member data"),
+            ("Monthly repair orders", format_metric(current["average_repair_orders"], "count"), "Average submitted shop-month"),
+            ("Average monthly sales", format_metric(current["average_total_sales_cad"], "cad"), "Labour, parts and tires"),
+        ]
+        st.success(
+            f"Headline indicators use qualified approved member data for {period}. The historical "
+            "benchmark remains below for long-term comparison."
+        )
+    else:
+        values = [
+            ("Survey respondents", "572", "Canadian automotive service providers"),
+            ("Hours / repair order", format_metric(mechanical_all.loc["hours_repair_order", "value"], "hours"), "Mechanical shop average · 2015"),
+            ("Hours / technician / day", format_metric(mechanical_all.loc["hours_technician_day", "value"], "hours"), "Historical daily measure · 2015"),
+            ("Hiring intention", "57%", "Planned to hire a technician · 2015"),
+        ]
+        if current_data_enabled():
+            st.info(
+                "No national current-member cohort has reached the privacy threshold, so headline "
+                "indicators are using the historical AIA benchmark."
+            )
     for column, item in zip(cards, values):
         with column:
             metric_card(*item)
 
+    if use_member:
+        national_current = member_data[
+            (member_data["geography_type"] == "national")
+            & (member_data["geography_code"] == "CA")
+            & (member_data["shop_type"] == "Mechanical")
+        ].sort_values("reporting_month")
+        if not national_current.empty:
+            current_fig = px.line(
+                national_current,
+                x="reporting_month",
+                y="hours_per_repair_order",
+                markers=True,
+                title="Current member trend · hours sold per repair order",
+                labels={"reporting_month": "Month", "hours_per_repair_order": "Hours"},
+            )
+            current_fig.update_traces(line_color="#D7263D")
+            chart(current_fig)
+
     st.write("")
+    st.subheader("Historical benchmark foundation")
     segment = repo.segment_benchmarks()
     national = segment[
         (segment["geography_type"] == "national")
@@ -368,6 +434,7 @@ def explorer_page(repo) -> None:
             if "hours_sold_technician_day" in available_metrics else 0,
         )
 
+    selected_regions: list[str] = []
     if scope == "Regional comparison":
         region_options = sorted(filtered["geography"].dropna().unique())
         linked_region = bridge.get("region")
@@ -438,6 +505,62 @@ def explorer_page(repo) -> None:
     else:
         st.dataframe(filtered, hide_index=True, width="stretch")
 
+    current_comparison = pd.DataFrame()
+    if current_data_enabled():
+        member_data = repo.member_benchmark_aggregates()
+        if scope == "Regional comparison":
+            province_codes = [
+                code
+                for code, region in AIA_REGION_BY_PROVINCE.items()
+                if region in selected_regions
+            ]
+            current_comparison = current_explorer_comparison(
+                member_data,
+                historical_metric_code=metric,
+                shop_type=segment,
+                geography_type="province",
+                province_codes=province_codes,
+            )
+        else:
+            current_comparison = current_explorer_comparison(
+                member_data,
+                historical_metric_code=metric,
+                shop_type=segment,
+                geography_type="national",
+            )
+
+        st.subheader("Current member-data comparison")
+        if metric not in CURRENT_METRIC_MAP:
+            st.info(
+                "The current contribution contract does not collect a directly compatible measure for "
+                f'“{label}.” The historical result above remains the authoritative comparison for this measure.'
+            )
+        elif current_comparison.empty:
+            st.info(
+                "No matching current-member cohort has reached the five-contributor privacy threshold. "
+                "The historical benchmark remains the best available source."
+            )
+        else:
+            current_comparison["Geography"] = current_comparison["geography_code"].map(
+                lambda code: "Canada" if code == "CA" else PROVINCE_NAMES.get(code, code)
+            )
+            member_fig = px.bar(
+                current_comparison,
+                x="Geography",
+                y="value",
+                color="Geography",
+                text_auto=".2f",
+                title=f"Qualified current member data · {label}",
+                labels={"value": label},
+                color_discrete_sequence=["#D7263D", "#1B5B83", "#6F9CB7"],
+            )
+            chart(member_fig)
+            st.caption(
+                "Current values represent all submitted shop sizes in each qualified cohort. Historical "
+                "shop-size and affiliation cuts remain visible above because those dimensions are not "
+                "collected in the member contribution contract."
+            )
+
     valid_values = filtered[metric].dropna()
     kpis = st.columns(3)
     with kpis[0]:
@@ -468,6 +591,13 @@ def explorer_page(repo) -> None:
             "application/pdf",
             width="stretch",
         )
+    if not current_comparison.empty:
+        st.download_button(
+            "Download current member comparison CSV",
+            csv_bytes(current_comparison),
+            "aia_current_member_benchmark_comparison.csv",
+            "text/csv",
+        )
     source_note("7–10")
 
 
@@ -479,6 +609,9 @@ def performance_page(repo) -> None:
     )
     data = repo.performance_benchmarks()
     shop_type = st.segmented_control("Shop type", ["Mechanical", "Tire"], default="Mechanical")
+    member_data = repo.member_benchmark_aggregates()
+    member_selection = select_member_benchmark(member_data, shop_type=shop_type)
+    use_member = current_data_enabled() and member_selection.available
     scoped = data[data["shop_type"] == shop_type].copy()
     available = scoped[scoped["metric_code"].isin(PERFORMANCE_FOCUS_METRICS)]
     metric_code = st.selectbox(
@@ -486,8 +619,20 @@ def performance_page(repo) -> None:
         list(dict.fromkeys(available["metric_code"])),
         format_func=lambda code: available.loc[available["metric_code"] == code, "metric_label"].iloc[0],
     )
-    comparison = scoped[scoped["metric_code"] == metric_code]
+    comparison = scoped[scoped["metric_code"] == metric_code].copy()
     metric_label = comparison["metric_label"].iloc[0]
+    if use_member and metric_code == "hours_repair_order":
+        current = member_selection.record
+        comparison = pd.concat([
+            comparison,
+            pd.DataFrame([{
+                "shop_type": shop_type,
+                "cohort": "Current member pool",
+                "metric_code": metric_code,
+                "metric_label": metric_label,
+                "value": current["hours_per_repair_order"],
+            }]),
+        ], ignore_index=True)
     fig = px.bar(
         comparison,
         x="cohort",
@@ -500,13 +645,29 @@ def performance_page(repo) -> None:
             "All shops": "#91A7B4",
             "Ticket size leaders": "#1B5B83",
             "Productivity leaders": "#D7263D",
+            "Current member pool": "#2B8A66",
         },
     )
     chart(fig)
+    if use_member and metric_code == "hours_repair_order":
+        current_period = pd.to_datetime(member_selection.record["reporting_month"]).strftime("%B %Y")
+        st.success(
+            f"The comparison includes the qualified {current_period} current-member cohort "
+            f"({int(member_selection.record['contributor_count']):,} contributors)."
+        )
+    elif current_data_enabled() and metric_code != "hours_repair_order":
+        st.info(
+            "Current member submissions do not yet collect this measure in a directly compatible daily "
+            "or percentage unit, so the historical performance cohorts remain in use."
+        )
     source_note("12" if shop_type == "Mechanical" else "15")
 
     st.subheader("Opportunity calculator")
     st.caption("A directional scenario—not a forecast. Adjust the inputs to match a member shop.")
+    current_ticket_default = (
+        float(member_selection.record["hours_per_repair_order"])
+        if use_member else 1.67
+    )
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -516,7 +677,16 @@ def performance_page(repo) -> None:
             days_open = st.number_input("Days open / year", min_value=1, value=259, step=1)
             door_rate = st.number_input("Labour door rate (CAD)", min_value=1.0, value=110.0, step=5.0)
         with c3:
-            current_ticket = st.number_input("Current hours / repair order", min_value=0.1, value=1.67, step=0.1)
+            current_ticket = st.number_input(
+                "Current hours / repair order",
+                min_value=0.1,
+                value=current_ticket_default,
+                step=0.1,
+                help=(
+                    "Defaults to the latest qualified member benchmark when available; otherwise uses "
+                    "the historical mechanical-shop average."
+                ),
+            )
             current_productivity = st.number_input("Current hours / technician / day", min_value=0.1, value=4.4, step=0.1)
 
     def benchmark(metric: str, cohort: str) -> float:
@@ -639,6 +809,40 @@ def member_data_pool_page(repo) -> None:
             format_metric(latest["sales_per_repair_order_cad"], "cad"),
             "Labour, parts and tire sales",
         )
+
+    historical_performance = repo.performance_benchmarks()
+    historical_ticket = historical_performance[
+        (historical_performance["shop_type"] == shop_type)
+        & (historical_performance["cohort"] == "All shops")
+        & (historical_performance["metric_code"] == "hours_repair_order")
+    ]
+    if not historical_ticket.empty:
+        historical_hours = float(historical_ticket.iloc[0]["value"])
+        current_hours = float(latest["hours_per_repair_order"])
+        change_percent = (
+            (current_hours - historical_hours) / historical_hours * 100
+            if historical_hours else 0
+        )
+        st.subheader("Current result versus the historical foundation")
+        comparison_cards = st.columns(3)
+        with comparison_cards[0]:
+            metric_card(
+                "Current member cohort",
+                format_metric(current_hours, "hours"),
+                f"Hours / repair order · {latest_label}",
+            )
+        with comparison_cards[1]:
+            metric_card(
+                "Historical AIA benchmark",
+                format_metric(historical_hours, "hours"),
+                "All shops · 2015",
+            )
+        with comparison_cards[2]:
+            metric_card(
+                "Change from foundation",
+                f"{change_percent:+.1f}%",
+                "Directional comparison of compatible measures",
+            )
 
     trend1, trend2 = st.columns(2)
     with trend1:
@@ -904,13 +1108,64 @@ def demographics_page(repo, user: PortalUser) -> None:
         chart(fig)
 
     st.subheader("Linked auto care market view")
+    auto_shop_type = st.selectbox(
+        "Auto care shop type",
+        ["Mechanical", "Tire"],
+        key="demographic_auto_shop_type",
+    )
     aia_region = AIA_REGION_BY_PROVINCE.get(selected["province_code"], "Canada")
+    member_selection = select_member_benchmark(
+        repo.member_benchmark_aggregates(),
+        province_code=selected["province_code"],
+        shop_type=auto_shop_type,
+    )
+    current_auto_record = (
+        member_selection.record
+        if current_data_enabled() and member_selection.available
+        else None
+    )
+    if current_auto_record is not None:
+        current_period = pd.to_datetime(current_auto_record["reporting_month"]).strftime("%B %Y")
+        member_scope = (
+            "Canada fallback"
+            if member_selection.used_national_fallback
+            else PROVINCE_NAMES[selected["province_code"]]
+        )
+        st.markdown("#### Best available current auto care context")
+        current_cards = st.columns(5)
+        current_values = [
+            ("Contributors", f"{int(current_auto_record['contributor_count']):,}"),
+            ("Repair orders / month", format_metric(current_auto_record["average_repair_orders"], "count")),
+            ("Hours / repair order", format_metric(current_auto_record["hours_per_repair_order"], "hours")),
+            ("Average monthly sales", format_metric(current_auto_record["average_total_sales_cad"], "cad")),
+            ("Sales / repair order", format_metric(current_auto_record["sales_per_repair_order_cad"], "cad")),
+        ]
+        for column, (label, value) in zip(current_cards, current_values):
+            with column:
+                metric_card(label, value, f"{member_scope} · {current_period}")
+        if member_selection.used_national_fallback:
+            st.info(
+                f"No {PROVINCE_NAMES[selected['province_code']]} cohort has reached the privacy "
+                "threshold, so the qualified national member cohort is used as the current fallback."
+            )
+        else:
+            st.success(
+                f"This demographic selection is directly linked to the qualified "
+                f"{PROVINCE_NAMES[selected['province_code']]} member cohort."
+            )
+    elif current_data_enabled():
+        st.info(
+            "No matching current-member cohort has reached the privacy threshold. The historical AIA "
+            "regional benchmark below is the best available auto care source for this selection."
+        )
+
+    st.markdown("#### Historical benchmark foundation")
     benchmark = repo.segment_benchmarks()
     geography_type = "national" if aia_region == "Canada" else "region"
     scoped = benchmark[
         (benchmark["geography_type"] == geography_type)
         & (benchmark["geography"] == aia_region)
-        & (benchmark["segment"] == "Mechanical")
+        & (benchmark["segment"] == auto_shop_type)
         & (benchmark["affiliation"] == "All")
     ]
     st.caption(
@@ -999,13 +1254,19 @@ def demographics_page(repo, user: PortalUser) -> None:
             shops_serving_market=int(shops_serving_market),
             target_share_percent=target_share_percent,
         )
-        scenario_cards = st.columns(4)
         scenario_values = [
             ("Estimated vehicle base", f"{scenario.estimated_vehicles:,.0f}", "Households × vehicles assumption"),
             ("Annual auto care pool", f"${scenario.annual_auto_care_pool:,.0f}", "Vehicles × spending assumption"),
             ("Pool / serving shop", f"${scenario.annual_pool_per_shop:,.0f}", "Scenario pool ÷ assumed shops"),
             ("Revenue at target share", f"${scenario.target_share_revenue:,.0f}", "Scenario pool × target share"),
         ]
+        if current_auto_record is not None:
+            scenario_values.append((
+                "Current annualized shop sales",
+                f"${float(current_auto_record['average_total_sales_cad']) * 12:,.0f}",
+                "Qualified monthly member average × 12",
+            ))
+        scenario_cards = st.columns(len(scenario_values))
         for column, values in zip(scenario_cards, scenario_values):
             with column:
                 metric_card(*values)
@@ -1020,6 +1281,13 @@ def demographics_page(repo, user: PortalUser) -> None:
             signals.append(
                 f"Residents aged 65+ represented {age_65_plus / population * 100:.1f}% of the 2021 population; "
                 "this is planning context, not a vehicle-ownership proxy."
+            )
+        if current_auto_record is not None:
+            annualized_member_sales = float(current_auto_record["average_total_sales_cad"]) * 12
+            signals.append(
+                f"The latest qualified member cohort annualizes to ${annualized_member_sales:,.0f} "
+                "in average shop sales; compare it with the scenario pool per serving shop without "
+                "treating either value as a forecast."
             )
         st.markdown("#### Planning signals\n\n" + "\n".join(f"- {signal}" for signal in signals))
 
@@ -1039,6 +1307,18 @@ def demographics_page(repo, user: PortalUser) -> None:
                 {"basis": f"AIA 2015 · {aia_region}", "measure": "Repair orders per year", "value": linked_benchmark["average_repair_orders_year"]},
                 {"basis": f"AIA 2015 · {aia_region}", "measure": "Hours per repair order", "value": linked_benchmark["average_hours_repair_order"]},
                 {"basis": f"AIA 2015 · {aia_region}", "measure": "Hours sold per technician per day", "value": linked_benchmark["hours_sold_technician_day"]},
+            ])
+        if current_auto_record is not None:
+            member_basis = (
+                f"Approved member data · {member_selection.geography_label} · "
+                f"{pd.to_datetime(current_auto_record['reporting_month']).strftime('%Y-%m')}"
+            )
+            export_rows.extend([
+                {"basis": member_basis, "measure": "Contributors", "value": current_auto_record["contributor_count"]},
+                {"basis": member_basis, "measure": "Average monthly repair orders", "value": current_auto_record["average_repair_orders"]},
+                {"basis": member_basis, "measure": "Hours per repair order", "value": current_auto_record["hours_per_repair_order"]},
+                {"basis": member_basis, "measure": "Average monthly sales (CAD)", "value": current_auto_record["average_total_sales_cad"]},
+                {"basis": member_basis, "measure": "Sales per repair order (CAD)", "value": current_auto_record["sales_per_repair_order_cad"]},
             ])
         st.download_button(
             "Download linked market scenario",
