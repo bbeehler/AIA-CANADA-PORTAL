@@ -1813,6 +1813,61 @@ def admin_page(repo, user: PortalUser) -> None:
         user_notice = st.session_state.pop("admin_user_notice", None)
         if user_notice:
             st.success(user_notice)
+
+        with st.expander("Add user", expanded=not profiles):
+            st.caption(
+                "Create a Supabase login with a temporary password. Share it through an approved "
+                "secure channel and have the user replace it as soon as password reset is available."
+            )
+            with st.form("create_user_form", clear_on_submit=True):
+                new_email = st.text_input("Email", key="new_user_email")
+                new_full_name = st.text_input("Full name", key="new_user_full_name")
+                create1, create2 = st.columns(2)
+                with create1:
+                    new_organization = st.text_input("Organization", key="new_user_organization")
+                    new_province = st.text_input("Province / territory", key="new_user_province")
+                    new_role = st.selectbox(
+                        "Portal role", ["member", "analyst", "admin"], key="new_user_role"
+                    )
+                with create2:
+                    new_status = st.selectbox(
+                        "Membership status", ["pending", "active", "suspended"],
+                        key="new_user_status",
+                    )
+                    new_password = st.text_input(
+                        "Temporary password", type="password", key="new_user_password",
+                        help="Use 10 to 128 characters and share it only through a secure channel.",
+                    )
+                    confirm_password = st.text_input(
+                        "Confirm temporary password", type="password", key="confirm_new_user_password"
+                    )
+                create_user = st.form_submit_button("Create user", type="primary")
+
+            if create_user:
+                if not new_email.strip() or not new_full_name.strip():
+                    st.error("Email and full name are required.")
+                elif len(new_password) < 10 or len(new_password) > 128:
+                    st.error("Temporary password must be 10 to 128 characters.")
+                elif new_password != confirm_password:
+                    st.error("Temporary passwords do not match.")
+                else:
+                    try:
+                        repo.create_user(
+                            email=new_email.strip(),
+                            password=new_password,
+                            full_name=new_full_name.strip(),
+                            organization=new_organization.strip(),
+                            province=new_province.strip(),
+                            membership_status=new_status,
+                            role=new_role,
+                        )
+                        st.session_state.admin_user_notice = (
+                            f"{new_full_name.strip()} was created. Share the temporary password securely."
+                        )
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not create the user: {exc}")
+
         st.dataframe(pd.DataFrame(profiles), hide_index=True, width="stretch")
         if profiles:
             labels = {

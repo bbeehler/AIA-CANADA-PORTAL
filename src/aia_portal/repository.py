@@ -291,6 +291,32 @@ class DemoRepository:
                 return
         raise KeyError("Member not found")
 
+    def create_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        full_name: str,
+        organization: str,
+        province: str,
+        membership_status: str,
+        role: str,
+    ) -> None:
+        del password
+        normalized_email = email.strip().lower()
+        if any(item.get("email", "").lower() == normalized_email for item in self.state["demo_users"]):
+            raise ValueError("A user with that email already exists")
+        self.state["demo_users"].append({
+            "id": str(uuid4()),
+            "email": normalized_email,
+            "full_name": full_name,
+            "organization": organization,
+            "province": province.upper(),
+            "role": role,
+            "membership_status": membership_status,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
     def update_user(
         self,
         user_id: str,
@@ -567,6 +593,31 @@ class SupabaseRepository:
             "new_membership_status": membership_status,
             "new_role": role,
         }).execute()
+
+    def create_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        full_name: str,
+        organization: str,
+        province: str,
+        membership_status: str,
+        role: str,
+    ) -> None:
+        self.client.functions.invoke("admin-users", {
+            "body": {
+                "action": "create",
+                "email": email,
+                "password": password,
+                "full_name": full_name,
+                "organization": organization,
+                "province": province,
+                "membership_status": membership_status,
+                "role": role,
+            },
+            "responseType": "json",
+        })
 
     def update_user(
         self,
