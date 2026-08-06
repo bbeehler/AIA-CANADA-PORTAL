@@ -94,7 +94,7 @@ Administrators stage new benchmark source files from **Admin Centre → Datasets
 
 Administrators approve member submissions from **Admin Centre → Contribution queue**. Approval revalidates the normalized file, imports its shop-month rows into an administrator-only observation table, and refreshes the member benchmark pool. National and provincial cohorts appear in **Member Data Pool** only when at least five distinct contributor accounts are represented for the same month and shop type. Raw shop rows are never exposed to members.
 
-The sidebar **Analytics source** control defaults to **Best available · current + historical**. Every analytical page checks for a qualified current member cohort first. If none exists—or the current contribution contract does not contain a directly compatible measure—the page uses the 2015 AIA benchmark and explains the fallback. Selecting **Historical benchmark only** provides a reproducible seed-report view.
+Every analytical page automatically checks for a qualified current member cohort first. If none exists—or the current contribution contract does not contain a directly compatible measure—the page uses the 2015 AIA benchmark and explains the fallback.
 
 ## Deploy on Streamlit Community Cloud
 

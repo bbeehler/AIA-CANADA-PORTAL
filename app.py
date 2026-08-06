@@ -23,9 +23,6 @@ from aia_portal.auth import (  # noqa: E402
 )
 from aia_portal.analytics import (  # noqa: E402
     CURRENT_METRIC_MAP,
-    SOURCE_BEST_AVAILABLE,
-    SOURCE_HISTORICAL_ONLY,
-    SOURCE_OPTIONS,
     current_explorer_comparison,
     normalize_member_benchmarks,
     select_member_benchmark,
@@ -123,10 +120,6 @@ def chart(fig: go.Figure) -> None:
             "toImageButtonOptions": {"format": "png", "filename": "aia-canada-chart", "scale": 2},
         },
     )
-
-
-def current_data_enabled() -> bool:
-    return st.session_state.get("analytics_source_mode", SOURCE_BEST_AVAILABLE) != SOURCE_HISTORICAL_ONLY
 
 
 def render_resource_content(content: str, content_format: str) -> None:
@@ -242,17 +235,6 @@ def portal_sidebar(user: PortalUser) -> str:
         if st.session_state.get("portal_page") not in pages:
             st.session_state["portal_page"] = "Overview"
         current = st.radio("Portal", pages, label_visibility="collapsed", key="portal_page")
-        st.caption("ANALYTICS SOURCE")
-        st.selectbox(
-            "Analytics source",
-            SOURCE_OPTIONS,
-            key="analytics_source_mode",
-            label_visibility="collapsed",
-            help=(
-                "Best available uses qualified current member data first and keeps the 2015 AIA "
-                "benchmark as historical context or fallback."
-            ),
-        )
         st.divider()
         st.markdown(f"**{escape(user.full_name)}**", unsafe_allow_html=True)
         st.caption(user.organization or user.email)
@@ -283,7 +265,7 @@ def overview_page(repo) -> None:
     ].set_index("metric_code")
     member_data = normalize_member_benchmarks(repo.member_benchmark_aggregates())
     member_selection = select_member_benchmark(member_data, shop_type="Mechanical")
-    use_member = current_data_enabled() and member_selection.available
+    use_member = True and member_selection.available
 
     cards = st.columns(4)
     if use_member:
@@ -306,7 +288,7 @@ def overview_page(repo) -> None:
             ("Hours / technician / day", format_metric(mechanical_all.loc["hours_technician_day", "value"], "hours"), "Historical daily measure · 2015"),
             ("Hiring intention", "57%", "Planned to hire a technician · 2015"),
         ]
-        if current_data_enabled():
+        if True:
             st.info(
                 "No national current-member cohort has reached the privacy threshold, so headline "
                 "indicators are using the historical AIA benchmark."
@@ -506,7 +488,7 @@ def explorer_page(repo) -> None:
         st.dataframe(filtered, hide_index=True, width="stretch")
 
     current_comparison = pd.DataFrame()
-    if current_data_enabled():
+    if True:
         member_data = repo.member_benchmark_aggregates()
         if scope == "Regional comparison":
             province_codes = [
@@ -611,7 +593,7 @@ def performance_page(repo) -> None:
     shop_type = st.segmented_control("Shop type", ["Mechanical", "Tire"], default="Mechanical")
     member_data = repo.member_benchmark_aggregates()
     member_selection = select_member_benchmark(member_data, shop_type=shop_type)
-    use_member = current_data_enabled() and member_selection.available
+    use_member = True and member_selection.available
     scoped = data[data["shop_type"] == shop_type].copy()
     available = scoped[scoped["metric_code"].isin(PERFORMANCE_FOCUS_METRICS)]
     metric_code = st.selectbox(
@@ -655,7 +637,7 @@ def performance_page(repo) -> None:
             f"The comparison includes the qualified {current_period} current-member cohort "
             f"({int(member_selection.record['contributor_count']):,} contributors)."
         )
-    elif current_data_enabled() and metric_code != "hours_repair_order":
+    elif True and metric_code != "hours_repair_order":
         st.info(
             "Current member submissions do not yet collect this measure in a directly compatible daily "
             "or percentage unit, so the historical performance cohorts remain in use."
@@ -1121,7 +1103,7 @@ def demographics_page(repo, user: PortalUser) -> None:
     )
     current_auto_record = (
         member_selection.record
-        if current_data_enabled() and member_selection.available
+        if True and member_selection.available
         else None
     )
     if current_auto_record is not None:
@@ -1153,7 +1135,7 @@ def demographics_page(repo, user: PortalUser) -> None:
                 f"This demographic selection is directly linked to the qualified "
                 f"{PROVINCE_NAMES[selected['province_code']]} member cohort."
             )
-    elif current_data_enabled():
+    elif True:
         st.info(
             "No matching current-member cohort has reached the privacy threshold. The historical AIA "
             "regional benchmark below is the best available auto care source for this selection."
